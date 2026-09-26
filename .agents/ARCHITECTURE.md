@@ -25,8 +25,11 @@ crates/
 │   ├── anim.rs        Keyed animation pool
 │   ├── physics.rs     Spring physics for smooth animations
 │   ├── persistence.rs Config parse/migrate/atomic write (the config path is injected)
+│   ├── plugin_settings.rs Plugin settings page model
 │   └── widgets.rs     Plugin widget model (PluginWidget, WidgetManager)
-├── winisland-plugin-api/  Plugin C ABI types + optional packager
+├── winisland-plugin-api/  ABI v2 types, draw protocol, SDK, and optional packager
+├── winisland-plugin-package/  Manifest, ZIP activation, signing, and marketplace catalog
+├── winisland-plugin-host/  Per-instance service tables, loader, lifecycle, resource registry, draw validation and replay
 ├── winisland-render/      Rendering values, Painter, images, text, D3D12 targets, and frame lifecycle
 ├── winisland-platform/    OS-neutral capability traits, window/event contracts, and value types; no dependencies or unsafe
 └── winisland-platform-windows/  Windows window/event loop, backdrop, shell, metrics, display, audio, media, notification, and input implementations
@@ -35,14 +38,9 @@ src/                 Application crate "WinIsland"; it depends on winisland-core
 ├── core/              Application-side scheduling and state
 │   ├── audio.rs       FFT spectrum and capture scheduling through AudioProvider
 │   ├── persistence.rs Config path adapter — resolves ~/.winisland/config.toml, forwards to winisland-core
-│   ├── plugin_settings.rs Plugin settings page model
 │   └── smtc.rs        Media state, lyrics, selection, and polling through MediaProvider
 ├── icons/             Custom vector path icons (arrows, controls, music, settings)
-├── plugin/            Native plugin system
-│   ├── loader.rs      NativePlugin — wraps DLL via libloading, C ABI vtable
-│   ├── manager.rs     PluginManager — RwLock registry, discover/install/unload
-│   ├── types.rs       Host-side Rust types mirroring C ABI structs
-│   └── zip_loader.rs  Plugin package extraction + manifest validation
+├── plugin/inventory.rs Installed-plugin list, enable state, and file removal for settings UI
 ├── ui/island.rs       Main draw_island() composition and island views
 ├── ui/expanded/       Expanded island views
 │   ├── music_view.rs  Music player page (album art, controls, progress)
@@ -60,7 +58,8 @@ src/                 Application crate "WinIsland"; it depends on winisland-core
 └── window/
     ├── app.rs         Main App state, input, frame scheduling, and orchestration
     ├── app/events.rs  AppHandler implementation consuming PlatformEvent
-    ├── app/system.rs  Tray polling and shell notifications through platform traits
+    ├── app/system.rs  Tray, plugin installation, and shell notifications
+    ├── app/v2.rs      ABI v2 resource snapshots and prepared widget frames
     └── settings/      Separate settings window
 ```
 
@@ -111,8 +110,9 @@ Each style draws its background differently:
 - **default**: Solid black
 
 D3D12 is the only rendering backend. `winisland-render` owns Skia, image handles, font caches,
-the D3D12 device, and frame presentation. The plugin ABI v1 adapter retains a hidden Skia
-re-export until its drawing bridge is replaced. Each frame starts with an unclipped transparent clear and
+the D3D12 device, and frame presentation. Plugin drawing reaches it only through validated ABI v2
+draw lists replayed by `winisland-plugin-host`; plugin callbacks run on their worker threads.
+Each frame starts with an unclipped transparent clear and
 isolates the drawing callback's canvas state. Resizing waits for GPU work and releases back-buffer
 references before calling ResizeBuffers. Renderer failures invalidate both windows' GPU caches
 and recreate their targets together. The companion backdrop window remains independent.
@@ -133,44 +133,45 @@ and recreate their targets together. The companion backdrop window remains indep
 
 ## Plugin system
 
-Plugins are trusted native DLLs loaded via `libloading` with versioned C ABI v1:
+Plugins are trusted in-process DLLs loaded by `winisland-plugin-host` through
+`libloading`. Each DLL exports `winisland_plugin_entry_v2()`, returning a
+`PluginDescriptorV2` with metadata, capabilities, `create`, `shutdown`,
+`destroy`, and optional `on_tick`. The descriptor receives a host-issued token
+and an instance-owned `PluginHostV2` table. Its `query_interface` exposes eleven
+capability-gated tables: Context, Media, I18n, HostState, Widget,
+LyricsTransform, Settings, Text, Image, Store, and Log. The wire contract lives
+in `winisland-plugin-api`; the host owns the registry, resource table, and
+implementation. `winisland-plugin-api` has no default external dependencies.
 
-```
-DLL exports: winisland_plugin_entry_v1() -> *const PluginDescriptorV1
+`App` creates one `PluginHost` and loads enabled ABI v2 plugins on startup.
+`src/plugin/inventory.rs` supplies the settings list and enable/uninstall file
+operations. ZIP extraction, manifest validation, marketplace data, signing,
+staging, and backup/rollback activation live in `winisland-plugin-package`.
+Installation validates `abi-version: 2` and DLL descriptor metadata before
+activation. V1 has no runtime compatibility path.
 
-PluginDescriptorV1:
-  ABI version + struct size
-  metadata: PluginMetadataC (id, name, version, author, description)
-  capability bitset (Context, Media, I18n, HostState, Widget, LyricsTransform)
-  create(create_info, out_handle) -> PluginResultC
-  shutdown(handle) -> PluginResultC
-  destroy(handle)
+Plugin resources belong to their token. Host services validate capability,
+ownership, generation, and quotas; shutdown revokes the token's resources.
+The host's worker runs tick, media-command, host-state, settings-change, and
+lyric-transform callbacks. Lyrics are transformed after fetch and retain word
+timing boundaries only if the replacement has the same character count.
+Context, media, settings, and widget snapshots feed the existing application
+models. Album art is decoded and supplied through the Image service.
 
-PluginCreateInfoV1:
-  host-issued PluginToken
-  HostApiV1 with query_interface()
+A widget worker submits a complete draw list. The host validates the entire
+list, resolves owned images, and prepares immutable drawing commands before
+rendering. `src/ui/expanded/widget_view.rs` and the settings preview replay
+those commands with host-side clipping, scaling, and alpha. No plugin callback
+runs on the render thread. Invalid lists are rejected; repeated malformed
+widget frames can disable that widget.
 
-Host services issue ResourceId values. Context, Media, translation, and Widget
-resources are owned by PluginToken, validated on every operation, and revoked
-after a successful shutdown. Plugins may call host services from worker threads;
-resource changes wake the platform event loop. shutdown must stop and join all plugin
-threads before the DLL can be destroyed and unloaded.
-
-LyricsTransform resources register bounded UTF-8 line callbacks. The host runs
-them once after lyrics are fetched and preserves word-synchronised timing byte
-boundaries when the transformed Unicode character count is unchanged.
-
-Widget rendering is synchronous and render-thread only: `draw_widget_page`
-(src/ui/expanded/widget_view.rs) places plugin widgets into free grid slots and
-invokes their `on_draw` callback on every frame. The plugin draws exclusively
-through the host-provided `DrawApiV1` drawing operations (src/plugin/manager.rs) — logical
-coordinates relative to the slot, host-applied scale/alpha, and a plugin-local
-transform stack — so plugins never touch the host Skia canvas directly.
-```
-
-Plugin packages are `.zip` files with a YAML manifest, one declared entry DLL,
-optional dependencies/assets, and optional signature metadata. Installation uses
-bounded staging extraction and backup/rollback directory activation.
+Unload joins the host worker, calls plugin `shutdown`, then `destroy`, and only
+then unloads the DLL. A failed shutdown keeps the DLL loaded. Release builds
+still use `panic = "abort"`: a panic in an `extern "C"` plugin callback can
+terminate the process. The host writes an active-plugin marker before callbacks;
+on the next start it disables plugins named by leftover markers and reports
+them. This recovery path has been verified with an isolated DLL runner, while
+the real application UI check and final ADR-0012 decision remain pending.
 
 ---
 
