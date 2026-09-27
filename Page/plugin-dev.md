@@ -47,7 +47,7 @@ DLL exports winisland_plugin_entry_v2() -> static PluginDescriptorV2
 
 ## Development flow
 
-1. Create a Rust `cdylib` with `winisland-plugin-api = "0.8"`.
+1. Create a Rust `cdylib` with the `winisland-plugin-api` dependency shown in the [quickstart](/plugin-dev/quickstart).
 2. Export `winisland_plugin_entry_v2` with a static `PluginDescriptorV2`.
 3. Validate `PluginCreateInfoV2` in `create` and use SDK `Host::from_raw` or raw service tables.
 4. Keep resource handles until `shutdown`; release them while host tables are valid.

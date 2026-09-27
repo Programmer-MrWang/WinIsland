@@ -73,4 +73,4 @@ tar -xOf target/hello-winisland-plugin-0.1.0.zip plugin.yml
 dumpbin /exports target/release/hello_winisland_plugin.dll
 ```
 
-Check that the DLL exports exactly `winisland_plugin_entry_v2`, `abi-version` is `2`, `entry` names the root DLL, and all five descriptor metadata fields match. If an update fails, read the installation error: the old package should stay active after a recoverable replacement failure. A shutdown that cannot finish keeps its DLL loaded to protect outstanding callbacks. Test install, update, disable/enable, rollback, and uninstall before distribution.
+Check that the DLL exports `winisland_plugin_entry_v2`, `abi-version` is `2`, `entry` names the root DLL, and all five descriptor metadata fields match. If an update fails, read the installation error: the old package should stay active after a recoverable replacement failure. A shutdown that cannot finish keeps its DLL loaded to protect outstanding callbacks. Test install, update, disable/enable, rollback, and uninstall before distribution.

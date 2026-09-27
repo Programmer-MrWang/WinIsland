@@ -1,5 +1,6 @@
 import apiChangelog from '../../crates/winisland-plugin-api/ChangeLog.md?raw'
 import downloadEn from '../download.md?raw'
+import faqEn from '../faq.md?raw'
 import gettingStartedEn from '../getting-started.md?raw'
 import guideEn from '../guide.md?raw'
 import pluginEn from '../plugin-dev.md?raw'
@@ -22,7 +23,7 @@ import changelogZh from '../../Changelog-zh.md?raw'
 export const docs = {
   en: {
     guide: guideEn,
-    faq: faqZh,
+    faq: faqEn,
     'getting-started': gettingStartedEn,
     download: downloadEn,
     'plugin-dev': pluginEn,

@@ -1,6 +1,6 @@
 # Plugin quickstart
 
-This example builds a complete ABI v2 DLL that publishes one Context. It validates the host input, keeps the resource alive, releases it during shutdown, and frees the opaque instance in destroy.
+This example builds a complete ABI v2 DLL that publishes one context. It validates the host input, keeps the resource alive, releases it during `shutdown`, and frees the opaque instance in `destroy`.
 
 ## Prerequisites
 

@@ -121,7 +121,7 @@ export const copy = {
       onThisPage: 'Documentation',
       pages: {
         guide: 'What is WinIsland?',
-        faq: 'Thoughts & FAQ (中文)',
+        faq: 'Thoughts & FAQ',
         'getting-started': 'Getting started',
         download: 'Download',
         'plugin-dev': 'Plugin development',
@@ -234,7 +234,7 @@ export const copy = {
         'plugin-dev/abi-lifecycle': 'ABI 与生命周期',
         'plugin-dev/services': '宿主服务',
         'plugin-dev/packaging': '打包与安装',
-        'api-changelog': 'API 更新日志',
+        'api-changelog': 'API 更新日志（英文）',
         changelog: '更新日志',
       },
     },

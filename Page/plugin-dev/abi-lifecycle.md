@@ -21,7 +21,7 @@ pub unsafe extern "C" fn winisland_plugin_entry_v2() -> *const PluginDescriptorV
 
 The host gives `create` a `PluginCreateInfoV2` with a nonzero `PluginToken` and an instance-owned `PluginHostV2`. Validate both pointers, `struct_size`, `abi_version`, and token before use. `Host::from_raw(info.host_api, info.plugin_token)` performs host-table checks for SDK users.
 
-Raw callers use `PluginHostV2.query(context, interface_id, IFACE_VERSION_1)`. Every returned table begins with `TablePrefix { struct_size, version, context }`. Validate the prefix and required optional function slots. Declaring a capability permits a service call; merely obtaining a table does not. The log table needs no capability bit.
+Raw callers use `PluginHostV2.query(context, interface_id, IFACE_VERSION_1)`. Every returned table begins with `TablePrefix { struct_size, version, context }`. Validate the prefix and check that each function slot the plugin needs is populated. Declaring a capability permits a service call; merely obtaining a table does not. The log table needs no capability bit.
 
 A successful `create` writes one non-null `PluginHandleV2` and returns `PluginStatus::Ok`. If creation fails with a non-null partial handle, the host calls `shutdown` and then `destroy` if shutdown succeeds. If partial cleanup fails, the DLL and its host tables remain allocated until process exit. Return a null handle when there is no initialized state to clean.
 

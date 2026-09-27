@@ -1,6 +1,6 @@
 # 插件快速开始
 
-本例构建完整的 ABI v2 DLL，发布一个 Context。示例校验宿主输入，持有资源，在 shutdown 中释放资源，并在 destroy 中释放不透明实例。
+本例构建完整的 ABI v2 DLL，发布一条活动状态文字。示例校验宿主输入，持有资源，在 `shutdown` 中释放资源，并在 `destroy` 中释放不透明实例。
 
 ## 前置条件
 
@@ -16,7 +16,7 @@ cargo new --lib hello-winisland-plugin
 cd hello-winisland-plugin
 ```
 
-使用以下 `Cargo.toml`。在 ABI v2 crate 发布到注册表前，先使用此处的仓库源码；发布后可改用匹配的 `winisland-plugin-api = "0.8"` 版本。
+使用以下 `Cargo.toml`。在支持 ABI v2 的库发布到注册表前，先使用此处的仓库源码；发布后可改用匹配的 `winisland-plugin-api = "0.8"` 版本。
 
 ```toml
 [package]
@@ -35,7 +35,7 @@ crate-type = ["cdylib"]
 winisland-plugin-api = { git = "https://github.com/WinIslandProject/WinIsland" }
 ```
 
-包 ID、名称、版本、作者和描述必须与 Descriptor、安装包 manifest 一致。repository URL 会成为 `github-link`。
+包 ID、名称、版本、作者和描述必须与描述符、安装包清单一致。`repository` 中的网址会成为 `github-link`。
 
 ## 实现 `src/lib.rs`
 
@@ -129,7 +129,7 @@ pub unsafe extern "C" fn winisland_plugin_entry_v2() -> *const PluginDescriptorV
 }
 ```
 
-`PluginStatus` 是数字状态，不包含错误字符串。需要详细诊断时使用 `LogApiV2`。任何导出的 C 回调都不能向外 unwind。
+`PluginStatus` 是数字状态，不包含错误字符串。需要详细诊断时使用 `LogApiV2`。任何导出的 C 回调都不能让栈展开越过 C 边界。
 
 ## 构建并加载
 
@@ -145,6 +145,6 @@ DLL 位于 `target/release/hello_winisland_plugin.dll`。本地开发时可将�
 
 ## 扩展示例
 
-- 在[宿主服务](/plugin-dev/services)中了解 Media、Widget、Settings、Image、Store 和歌词接口。
+- 在[宿主服务](/plugin-dev/services)中了解媒体、小组件、设置、图片、存储和歌词接口。
 - 添加回调或线程前阅读 [ABI 与生命周期](/plugin-dev/abi-lifecycle)。
 - [SDK 小组件示例](https://github.com/WinIslandProject/WinIsland/blob/master/crates/winisland-plugin-api/examples/minimal_widget.rs)展示了 `DrawListBuilder` 的使用。
