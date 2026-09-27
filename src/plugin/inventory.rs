@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
 
+use pollkit::Job;
 use winisland_plugin_api::abi::ABI_VERSION_2;
 use winisland_plugin_host::fault::{disabled_plugin_ids, set_plugin_disabled};
 use winisland_plugin_host::loader::PluginLibrary;
@@ -37,19 +37,9 @@ impl PluginManager {
         scan(&self.plugin_dir)
     }
 
-    pub fn installed_plugins_async(&self) -> mpsc::Receiver<Vec<InstalledPlugin>> {
+    pub fn installed_plugins_async(&self) -> Job<Vec<InstalledPlugin>> {
         let directory = self.plugin_dir.clone();
-        let (tx, rx) = mpsc::channel();
-        let result = std::thread::Builder::new()
-            .name("winisland-plugin-scan".to_string())
-            .spawn(move || {
-                let _ = tx.send(scan(&directory));
-                crate::platform::wake();
-            });
-        if let Err(error) = result {
-            log::warn!("Failed to start plugin scan: {error}");
-        }
-        rx
+        Job::spawn_named("winisland-plugin-scan", move || scan(&directory))
     }
 
     pub fn set_plugin_enabled(&self, id: &str, enabled: bool) -> Result<(), String> {

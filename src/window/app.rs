@@ -5,11 +5,11 @@ use crate::platform::WindowRef;
 use crate::plugin::inventory::PluginManager;
 use crate::ui::compact::CompactOverlay;
 use crate::window::settings::SettingsApp;
+use pollkit::{Cooldown, Every, Job};
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use winisland_core::config::{AppConfig, LyricTransitionAnimation, LyricTransitionMode};
 use winisland_core::context::ContextManager;
@@ -78,7 +78,7 @@ pub struct App {
     last_media_title: String,
     lyrics: LyricState,
     idle_timer: Instant,
-    last_effect_refresh: Instant,
+    effect_refresh: Every,
     hide: HideState,
     is_dragging: bool,
     dismissing_notification: bool,
@@ -89,13 +89,13 @@ pub struct App {
     drag_axis: Option<DragAxis>,
     last_update_time: Instant,
     last_render_time: Instant,
-    last_topmost_check: Instant,
+    topmost_check: Every,
     renderer_retry_at: Option<Instant>,
-    last_fullscreen_check: Instant,
-    last_config_check: Instant,
-    last_monitor_check: Instant,
-    last_working_set_trim: Instant,
-    compact_widget_refresh_at: Instant,
+    fullscreen_check: Every,
+    config_check: Every,
+    monitor_check: Every,
+    working_set_trim: Every,
+    compact_widget_refresh: Cooldown,
     last_config_modified: Option<SystemTime>,
     next_frame_deadline: Instant,
     animation_frame_interval: Duration,
@@ -124,10 +124,10 @@ pub struct App {
     v2_settings_revision: u64,
     plugin_media_source: Option<PluginMediaSource>,
     is_light_theme: bool,
-    pending_install: Option<mpsc::Receiver<InstallResult>>,
+    pending_install: Job<InstallResult>,
     marketplace_catalog: Option<MarketplaceCatalog>,
-    pending_marketplace_catalog: Option<mpsc::Receiver<MarketplaceCatalogResult>>,
-    pending_marketplace_download: Option<mpsc::Receiver<MarketplaceDownloadResult>>,
+    pending_marketplace_catalog: Job<MarketplaceCatalogResult>,
+    pending_marketplace_download: Job<MarketplaceDownloadResult>,
     right_press_cursor: Option<(i32, i32)>,
     is_right_dragging: bool,
     right_drag_start_offset: Option<(i32, i32)>,
@@ -201,7 +201,7 @@ impl Default for App {
             last_media_title: String::new(),
             lyrics: LyricState::default(),
             idle_timer: Instant::now(),
-            last_effect_refresh: Instant::now(),
+            effect_refresh: Every::secs(1),
             hide: HideState::default(),
             is_dragging: false,
             dismissing_notification: false,
@@ -212,13 +212,13 @@ impl Default for App {
             drag_axis: None,
             last_update_time: Instant::now(),
             last_render_time: Instant::now(),
-            last_topmost_check: Instant::now(),
+            topmost_check: Every::secs(1),
             renderer_retry_at: None,
-            last_fullscreen_check: Instant::now(),
-            last_config_check: Instant::now(),
-            last_monitor_check: Instant::now(),
-            last_working_set_trim: Instant::now(),
-            compact_widget_refresh_at: Instant::now(),
+            fullscreen_check: Every::millis(100),
+            config_check: Every::millis(500),
+            monitor_check: Every::secs(1),
+            working_set_trim: Every::new(frame::WORKING_SET_TRIM_INTERVAL),
+            compact_widget_refresh: Cooldown::ready(),
             last_config_modified,
             next_frame_deadline: Instant::now(),
             animation_frame_interval: DEFAULT_ANIMATION_FRAME_INTERVAL,
@@ -247,10 +247,10 @@ impl Default for App {
             v2_settings_revision: 0,
             plugin_media_source: None,
             is_light_theme: false,
-            pending_install: None,
+            pending_install: Job::idle(),
             marketplace_catalog: None,
-            pending_marketplace_catalog: None,
-            pending_marketplace_download: None,
+            pending_marketplace_catalog: Job::idle(),
+            pending_marketplace_download: Job::idle(),
             right_press_cursor: None,
             is_right_dragging: false,
             right_drag_start_offset: None,
