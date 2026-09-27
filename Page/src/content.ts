@@ -234,7 +234,7 @@ export const copy = {
         'plugin-dev/abi-lifecycle': 'ABI 与生命周期',
         'plugin-dev/services': '宿主服务',
         'plugin-dev/packaging': '打包与安装',
-        'api-changelog': 'API 更新日志（英文）',
+        'api-changelog': 'API 更新日志',
         changelog: '更新日志',
       },
     },
