@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use winisland_plugin_api::abi::{CAP_WIDGET, PluginStatus};
 use winisland_plugin_api::draw::v2::MAX_LIST_BYTES;
-use winisland_plugin_api::types::v2::widget::WidgetSpecV2;
+use winisland_plugin_api::types::v2::widget::{WIDGET_FLAG_SHOW_COMPACT, WidgetSpecV2};
 use winisland_plugin_api::types::v2::{PluginToken, WidgetId};
 
 use super::{read_struct, runtime};
@@ -13,6 +13,7 @@ use crate::runtime::WidgetRecord;
 fn valid_spec(spec: &WidgetSpecV2) -> bool {
     (1..=4).contains(&spec.span_cols)
         && (1..=4).contains(&spec.span_rows)
+        && spec.flags & !WIDGET_FLAG_SHOW_COMPACT == 0
         && spec.min_width.is_finite()
         && spec.min_height.is_finite()
         && spec.min_width >= 0.0

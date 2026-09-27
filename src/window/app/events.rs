@@ -224,20 +224,19 @@ impl App {
                         let spectrum = self.audio.get_spectrum();
                         let default_media_info = crate::core::smtc::MediaInfo::default();
                         let plugin_media_active = self.plugin_media_source.is_some();
-                        let available_controls = if let Some(source) =
-                            self.plugin_media_source.as_mut()
-                        {
-                            source.info.spectrum = spectrum;
-                            source.available_controls
-                        } else if self.config.smtc_enabled {
-                            self.smtc_media_info.spectrum = spectrum;
-                            winisland_plugin_api::types::v2::context::MEDIA_CONTROL_TOGGLE_PLAY
+                        let available_controls =
+                            if let Some(source) = self.plugin_media_source.as_mut() {
+                                source.info.spectrum = spectrum;
+                                source.available_controls
+                            } else if self.config.smtc_enabled {
+                                self.smtc_media_info.spectrum = spectrum;
+                                winisland_plugin_api::types::v2::context::MEDIA_CONTROL_TOGGLE_PLAY
                                 | winisland_plugin_api::types::v2::context::MEDIA_CONTROL_PREVIOUS
                                 | winisland_plugin_api::types::v2::context::MEDIA_CONTROL_NEXT
                                 | winisland_plugin_api::types::v2::context::MEDIA_CONTROL_SEEK
-                        } else {
-                            0
-                        };
+                            } else {
+                                0
+                            };
                         let v2_widgets_changed = self.refresh_v2_widgets();
                         self.prepare_v2_frames();
                         self.refresh_v2_contexts();
@@ -398,6 +397,8 @@ impl App {
                                             use_blur: self.config.motion_blur,
                                             font_size: self.config.font_size,
                                             dt,
+                                            expanded_width: self.config.expanded_width,
+                                            expanded_height: self.config.expanded_height,
                                             widget_layout: if compact_components_hidden {
                                                 &[]
                                             } else {

@@ -88,6 +88,7 @@ impl App {
         };
         for error in host.drain_failed_plugins() {
             log::warn!("{error}");
+            Self::show_toast("Plugin disabled", &error);
         }
         let widgets = host.widgets_snapshot();
         let current_ids = widgets
@@ -137,14 +138,31 @@ impl App {
                     self.plugin_frames.insert(*id, frame);
                 }
                 Ok(None) => {}
-                Err(error) if error.consecutive_failures == 1 || error.disabled => {
+                Err(error) if error.consecutive_failures == 1 => {
                     log::warn!("Plugin widget {id} draw list rejected: {}", error.reason);
-                    if error.disabled {
-                        self.plugin_frames.remove(id);
-                    }
+                }
+                Err(error) if error.disabled => {
+                    self.plugin_frames.remove(id);
                 }
                 Err(_) => {}
             }
+        }
+        match host.runtime().drain_disabled_widgets() {
+            Ok(disabled) if !disabled.is_empty() => {
+                let widgets = self.widget_mgr.widgets();
+                for id in disabled {
+                    let plugin = widgets
+                        .iter()
+                        .find(|widget| widget.id == id.get())
+                        .map_or("Unknown plugin", |widget| widget.plugin_id.as_str());
+                    let message =
+                        format!("{plugin}: widget disabled after repeated invalid frames");
+                    log::warn!("{message}");
+                    Self::show_toast("Plugin widget disabled", &message);
+                }
+            }
+            Ok(_) => {}
+            Err(status) => log::warn!("Cannot read disabled plugin widgets: {status:?}"),
         }
     }
 }

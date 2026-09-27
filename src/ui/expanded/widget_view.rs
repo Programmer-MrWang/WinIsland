@@ -44,6 +44,8 @@ pub fn draw_widget_page(
     h: f32,
     alpha: u8,
     scale: f32,
+    expanded_width: f32,
+    expanded_height: f32,
     widget_layout: &[WidgetSlot],
     plugin_widget_layout: &[PluginWidgetSlot],
     plugin_widgets: &WidgetManager,
@@ -56,6 +58,7 @@ pub fn draw_widget_page(
 
     if alpha > 20 {
         let layout = widget_grid_layout(ox, oy, w, h, scale);
+        let logical_layout = widget_grid_layout(0.0, 0.0, expanded_width, expanded_height, 1.0);
 
         let mut occupied = [false; WIDGET_GRID_SLOTS];
         for slot in 0..WIDGET_GRID_SLOTS {
@@ -106,9 +109,8 @@ pub fn draw_widget_page(
             if let Some(host) = plugin_host
                 && plugin_frames.contains_key(&widget.id)
             {
-                let inv_scale = if scale > 0.0 { 1.0 / scale } else { 1.0 };
-                let _ =
-                    host.set_widget_logical_size(widget.id, tile_w * inv_scale, tile_h * inv_scale);
+                let (_, _, logical_w, logical_h) = logical_layout.footprint_rect_span(anchor, span);
+                let _ = host.set_widget_logical_size(widget.id, logical_w, logical_h);
             }
             if let Some(frame) = plugin_frames.get(&widget.id) {
                 draw_prepared_widget(

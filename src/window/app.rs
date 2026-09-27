@@ -2,7 +2,7 @@ use crate::core::audio::AudioProcessor;
 use crate::core::persistence::{get_config_path, load_config};
 use crate::core::smtc::{MediaInfo, SmtcListener};
 use crate::platform::WindowRef;
-use crate::plugin::PluginManager;
+use crate::plugin::inventory::PluginManager;
 use crate::ui::compact::CompactOverlay;
 use crate::window::settings::SettingsApp;
 use std::cell::Cell;
