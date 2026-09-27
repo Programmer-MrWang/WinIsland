@@ -1,7 +1,10 @@
 use crate::core::smtc::MediaInfo;
 use crate::ui::expanded::music_view::{DrawMusicPageParams, draw_music_page};
 use crate::ui::expanded::widget_view::draw_widget_page;
+use std::collections::HashMap;
 use winisland_core::config::{PluginWidgetSlot, WidgetSlot};
+use winisland_plugin_host::draw::replay::PreparedFrame;
+use winisland_plugin_host::host::PluginHost;
 use winisland_render::{BlurSpec, LayerSpec, Painter, Rgba, Vec2};
 
 pub(super) struct ExpandedContentParams<'a> {
@@ -22,12 +25,16 @@ pub(super) struct ExpandedContentParams<'a> {
     pub(super) use_blur: bool,
     pub(super) font_size: f32,
     pub(super) dt: f32,
+    pub(super) expanded_width: f32,
+    pub(super) expanded_height: f32,
     pub(super) text_color: Rgba,
     pub(super) text_color_sec: Rgba,
     pub(super) palette: &'a [Rgba],
     pub(super) widget_layout: &'a [WidgetSlot],
     pub(super) plugin_widget_layout: &'a [PluginWidgetSlot],
     pub(super) plugin_widgets: &'a winisland_core::widgets::WidgetManager,
+    pub(super) plugin_frames: &'a HashMap<u64, PreparedFrame>,
+    pub(super) plugin_host: Option<&'a PluginHost>,
 }
 
 pub(super) fn draw_expanded_content(params: ExpandedContentParams<'_>) -> bool {
@@ -49,12 +56,16 @@ pub(super) fn draw_expanded_content(params: ExpandedContentParams<'_>) -> bool {
         use_blur,
         font_size,
         dt,
+        expanded_width,
+        expanded_height,
         text_color,
         text_color_sec,
         palette,
         widget_layout,
         plugin_widget_layout,
         plugin_widgets,
+        plugin_frames,
+        plugin_host,
     } = params;
     let mut widget_animating = false;
     if expanded_alpha_f > 0.01 {
@@ -110,9 +121,13 @@ pub(super) fn draw_expanded_content(params: ExpandedContentParams<'_>) -> bool {
                 current_h,
                 alpha,
                 global_scale,
+                expanded_width,
+                expanded_height,
                 widget_layout,
                 plugin_widget_layout,
                 plugin_widgets,
+                plugin_frames,
+                plugin_host,
                 text_color,
                 music_page_available,
             );
