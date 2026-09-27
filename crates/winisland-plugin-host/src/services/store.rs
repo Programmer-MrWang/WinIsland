@@ -27,6 +27,9 @@ fn path(host: &HostRuntime, token: PluginToken, key: &str) -> Result<PathBuf, Pl
 }
 
 fn key(value: Utf8Slice) -> Result<String, PluginStatus> {
+    if value.len > 255 {
+        return Err(PluginStatus::LimitExceeded);
+    }
     let key = unsafe { read_utf8(value, 255) }?;
     if key.is_empty() {
         return Err(PluginStatus::InvalidArgument);
@@ -107,6 +110,9 @@ pub unsafe extern "C" fn set(
         Ok(key) => key,
         Err(status) => return status,
     };
+    if value.len as usize > MAX_VALUE {
+        return PluginStatus::LimitExceeded;
+    }
     let value = match unsafe { read_bytes(value, MAX_VALUE) } {
         Ok(value) => value,
         Err(status) => return status,

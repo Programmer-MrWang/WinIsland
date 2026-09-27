@@ -106,6 +106,9 @@ pub unsafe extern "C" fn update(
     if let Err(status) = host.registry.require(token, CAP_MEDIA) {
         return status;
     }
+    if let Err(status) = host.resources.require(token, ResourceKind::Media, id.get()) {
+        return status;
+    }
     // SAFETY: The borrowed cover is copied before returning.
     let record = match unsafe { copy_media(&data) } {
         Ok(record) => record,
@@ -148,6 +151,9 @@ pub unsafe extern "C" fn release(
         Err(status) => return status,
     };
     if let Err(status) = host.registry.require(token, CAP_MEDIA) {
+        return status;
+    }
+    if let Err(status) = host.resources.require(token, ResourceKind::Media, id.get()) {
         return status;
     }
     let Ok(mut state) = host.state.lock() else {

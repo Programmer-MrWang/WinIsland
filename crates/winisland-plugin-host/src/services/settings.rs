@@ -243,6 +243,12 @@ pub unsafe extern "C" fn update(
     if let Err(status) = host.registry.require(token, CAP_SETTINGS) {
         return status;
     }
+    if let Err(status) = host
+        .resources
+        .require(token, ResourceKind::Settings, id.get())
+    {
+        return status;
+    }
     // SAFETY: Borrowed icon, items, and options are copied before return.
     let (record, bytes) = match unsafe { copy_page(data) } {
         Ok(value) => value,
@@ -285,6 +291,12 @@ pub unsafe extern "C" fn release(
         Err(status) => return status,
     };
     if let Err(status) = host.registry.require(token, CAP_SETTINGS) {
+        return status;
+    }
+    if let Err(status) = host
+        .resources
+        .require(token, ResourceKind::Settings, id.get())
+    {
         return status;
     }
     let Ok(mut state) = host.state.lock() else {

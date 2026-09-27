@@ -17,6 +17,7 @@ pub enum PluginHostError {
     Io(String),
     Invalid(String),
     Execution(String),
+    RetainedDll(String),
     Worker(String),
 }
 
@@ -26,6 +27,7 @@ impl fmt::Display for PluginHostError {
             Self::Io(message)
             | Self::Invalid(message)
             | Self::Execution(message)
+            | Self::RetainedDll(message)
             | Self::Worker(message) => formatter.write_str(message),
         }
     }

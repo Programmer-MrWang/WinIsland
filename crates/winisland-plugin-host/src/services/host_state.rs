@@ -90,6 +90,12 @@ pub unsafe extern "C" fn release_subscription(
     if let Err(status) = host.registry.require(token, CAP_HOST_STATE) {
         return status;
     }
+    if let Err(status) =
+        host.resources
+            .require(token, ResourceKind::HostStateSubscription, id.get())
+    {
+        return status;
+    }
     let Ok(mut state) = host.state.lock() else {
         return PluginStatus::Internal;
     };

@@ -67,6 +67,12 @@ pub unsafe extern "C" fn release(
     if let Err(status) = host.registry.require(token, CAP_LYRICS) {
         return status;
     }
+    if let Err(status) = host
+        .resources
+        .require(token, ResourceKind::Lyrics, id.get())
+    {
+        return status;
+    }
     let Ok(mut state) = host.state.lock() else {
         return PluginStatus::Internal;
     };

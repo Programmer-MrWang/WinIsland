@@ -111,7 +111,7 @@ impl PluginInstance {
                     }
                 } else {
                     std::mem::forget(library);
-                    return Err(PluginHostError::Execution(format!(
+                    return Err(PluginHostError::RetainedDll(format!(
                         "plugin create failed ({result:?}); shutdown failed, DLL kept loaded"
                     )));
                 }

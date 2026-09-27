@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::time::Duration;
@@ -28,17 +28,21 @@ pub struct PluginHost {
     runtime: Pin<Box<HostRuntime>>,
     plugin_dir: PathBuf,
     lyrics_bridge: LyricsBridge,
+    retained_dll: Cell<bool>,
 }
 
 impl PluginHost {
     pub fn new(plugin_dir: PathBuf, host_build: u32) -> Result<Self, PluginHostError> {
         std::fs::create_dir_all(&plugin_dir)
             .map_err(|error| PluginHostError::Io(format!("{}: {error}", plugin_dir.display())))?;
+        let plugin_dir = std::fs::canonicalize(&plugin_dir)
+            .map_err(|error| PluginHostError::Io(format!("{}: {error}", plugin_dir.display())))?;
         Ok(Self {
             entries: RefCell::new(Vec::new()),
             runtime: HostRuntime::new(host_build, plugin_dir.clone()),
             plugin_dir,
             lyrics_bridge: LyricsBridge::default(),
+            retained_dll: Cell::new(false),
         })
     }
 
@@ -234,6 +238,9 @@ impl PluginHost {
         let mut instance = match instance {
             Ok(instance) => instance,
             Err(error) => {
+                if matches!(error, PluginHostError::RetainedDll(_)) {
+                    self.retained_dll.set(true);
+                }
                 let _ = self.runtime.revoke_plugin(token);
                 return Err(error);
             }
@@ -448,6 +455,19 @@ impl PluginHost {
                     .map(|error| error.to_string())
             })
             .collect()
+    }
+}
+
+impl Drop for PluginHost {
+    fn drop(&mut self) {
+        for error in self.shutdown_all() {
+            log::error!("Plugin shutdown on host drop failed: {error}");
+        }
+        if self.retained_dll.get() || !self.entries.get_mut().is_empty() {
+            let replacement = HostRuntime::new(0, self.plugin_dir.clone());
+            let runtime = std::mem::replace(&mut self.runtime, replacement);
+            std::mem::forget(runtime);
+        }
     }
 }
 
