@@ -5266,13 +5266,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "winisland-plugin-v2-demo"
-version = "0.1.0"
-dependencies = [
- "winisland-plugin-api",
-]
-
-[[package]]
 name = "winisland-render"
 version = "1.3.9"
 dependencies = [
