@@ -1,5 +1,13 @@
 # Changelog
 
+### v1.4.0
+- Refactored the underlying architecture, rendering, and window systems
+- Reworked the plugin system; older plugins require updates
+- Improved widget layout and plugin stability
+- Improved window responsiveness and software compatibility
+- Improved English and Chinese documentation and FAQs
+- Fixed known issues
+
 ### v1.3.9
 - Separated inactivity and fullscreen auto-hide. Fullscreen hiding blocks manual reveal while volume and brightness adjustments can appear temporarily.
 - Added a compact-island horizontal swipe to hide or restore media and widgets without vertical movement; tapping still opens the expanded view. The compact background returns to black while content is hidden.
