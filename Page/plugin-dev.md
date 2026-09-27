@@ -1,79 +1,61 @@
 # Plugin development
 
-WinIsland plugin API `0.6` publishes native ABI v1. A plugin is a Windows DLL loaded directly into the WinIsland process. It can publish compact contexts and configurable widgets, replace the displayed media source, transform parsed lyrics, register translations, and inspect the current host state.
+WinIsland loads trusted Windows DLLs using ABI v2. The current `winisland-plugin-api` crate is `0.8`. ABI v1 packages and entry points are rejected. Plugins can provide contexts, media sources, widgets, translations, lyric transforms, settings pages, and persistent values.
 
-> Plugins are trusted native code. There is no sandbox, process boundary, permission prompt, or crash isolation. Install and distribute plugins with the same care as desktop executables.
+> Plugins run inside WinIsland without a sandbox. A panic in an `extern "C"` callback can terminate the app.
 
-The old `0.2` `PluginVTable`, `PluginType`, `plugin_get_instance`, and `plugin_set_host_api` interfaces are not supported by ABI v1.
+## Guides
 
-## Documentation map
-
-| Guide | Use it for |
+| Guide | What it covers |
 |---|---|
-| [Quickstart](/plugin-dev/quickstart) | Create, build, and load a complete Context plugin |
-| [ABI and lifecycle](/plugin-dev/abi-lifecycle) | Descriptor validation, capabilities, threads, FFI rules, shutdown, and 0.2 migration |
-| [Host services](/plugin-dev/services) | Context, Media, lyrics transformation, i18n, Host State, resource limits, and callback behavior |
-| [Packaging and installation](/plugin-dev/packaging) | `PluginPackager`, `plugin.yml`, ZIP validation, updates, rollback, and troubleshooting |
-| [API changelog](/api-changelog) | Published API versions and breaking changes |
+| [Quickstart](/plugin-dev/quickstart) | Build, load, and package an ABI v2 plugin |
+| [ABI and lifecycle](/plugin-dev/abi-lifecycle) | Descriptor validation, ownership, callbacks, shutdown, and migration |
+| [Host services](/plugin-dev/services) | All eleven service tables, drawing, settings, and limits |
+| [Packaging and installation](/plugin-dev/packaging) | `plugin.yml`, ZIPs, signing, installation, and updates |
+| [API changelog](/api-changelog) | Historical published crate release notes |
 
-Start with the quickstart even if you intend to build a Media or i18n plugin. It establishes the entry descriptor and lifecycle contract that every plugin must implement.
+See the [SDK README](https://github.com/WinIslandProject/WinIsland/tree/master/crates/winisland-plugin-api) and [ABI definitions](https://github.com/WinIslandProject/WinIsland/tree/master/crates/winisland-plugin-api/src/abi) for exact Rust signatures.
 
-## Runtime architecture
+## Runtime model
 
 ```text
-plugin DLL exports winisland_plugin_entry_v1()
-    -> PluginDescriptorV1
-    -> WinIsland validates ABI, capabilities, metadata, and callbacks
-    -> WinIsland issues PluginToken and calls create(PluginCreateInfoV1)
-    -> plugin queries versioned HostApiV1 service tables
-    -> plugin creates host-owned resources identified by ResourceId
-    -> WinIsland calls shutdown(handle)
-    -> WinIsland revokes remaining resources
-    -> WinIsland calls destroy(handle) and unloads the DLL
+DLL exports winisland_plugin_entry_v2() -> static PluginDescriptorV2
+    -> host validates ABI, capabilities, callbacks, and metadata
+    -> host calls create(PluginCreateInfoV2) with token and PluginHostV2
+    -> plugin queries versioned service tables and creates resources
+    -> optional descriptor.on_tick runs on a plugin worker
+    -> widget submits a complete draw list; host validates and replays it
+    -> host calls shutdown(handle), then destroy(handle), then unloads DLL
 ```
 
-The lifecycle is strictly `create -> shutdown -> destroy`. `shutdown` must synchronously stop every worker and join every thread that can execute plugin code. WinIsland does not call `destroy` or unload the DLL when `shutdown` reports an error.
+`PluginDescriptorV2.capabilities` declares access to services. Every resource belongs to a host-issued `PluginToken`. Service tables use `PluginHostV2.query` and `IFACE_VERSION_1`, a separate version from `ABI_VERSION_2`.
 
-## Choose capabilities deliberately
-
-`PluginDescriptorV1.capabilities` is both a declaration and an authorization boundary. Declare only services the plugin uses.
-
-| Capability | Service | Typical use |
+| Capability | Table | Purpose |
 |---|---|---|
-| `CAPABILITY_CONTEXT` | `ContextApiV1` | Build status, timers, ongoing activities, compact text |
-| `CAPABILITY_MEDIA` | `MediaApiV1` | A custom now-playing source and optional playback controls |
-| `CAPABILITY_I18N` | `I18nApiV1` | Plugin-owned translation keys for supported languages |
-| `CAPABILITY_HOST_STATE` | `HostStateApiV1` | Read the displayed media and current light/dark theme |
-| `CAPABILITY_WIDGET` | `WidgetApiV1` | Render widgets managed by the Settings layout editor |
-| `CAPABILITY_LYRICS_TRANSFORM` | `LyricsTransformApiV1` | Transform parsed lyric text while preserving timing |
+| `CAP_CONTEXT` | `ContextApiV2` | Activity text |
+| `CAP_MEDIA` | `MediaApiV2` | Now-playing source, cover, and controls |
+| `CAP_I18N` | `I18nApiV2` | Translation bundles |
+| `CAP_HOST_STATE` | `HostStateApiV2` | Media/theme snapshot and subscriptions |
+| `CAP_WIDGET` | `WidgetApiV2` | Widgets and draw-list submission |
+| `CAP_LYRICS` | `LyricsTransformApiV2` | Parsed lyric transforms |
+| `CAP_SETTINGS` | `SettingsApiV2` | Declarative settings pages |
+| `CAP_TEXT` | `TextApiV2` | Text measurement and font families |
+| `CAP_IMAGE` | `ImageApiV2` | Images and current album art |
+| `CAP_STORE` | `StoreApiV2` | Plugin-scoped persistent bytes |
 
-Querying a service does not grant access by itself. Every resource call also carries the host-issued `PluginToken`, and the host rejects calls made without the declared capability.
+`LogApiV2` is available without a capability bit. Declare only what the plugin uses.
 
-## Ownership model
+## Development flow
 
-- WinIsland issues one nonzero `PluginToken` per loaded instance.
-- Service create/register calls issue nonzero `ResourceId` values.
-- A token can update or release only its own resources of the correct service type.
-- Plugins should release resources during `shutdown`; WinIsland revokes leftovers after successful shutdown.
-- Worker threads may call host services. Resource changes wake the WinIsland event loop.
-- A DLL and its function pointers must remain valid until shutdown completes and all callbacks have returned.
+1. Create a Rust `cdylib` with `winisland-plugin-api = "0.8"`.
+2. Export `winisland_plugin_entry_v2` with a static `PluginDescriptorV2`.
+3. Validate `PluginCreateInfoV2` in `create` and use SDK `Host::from_raw` or raw service tables.
+4. Keep resource handles until `shutdown`; release them while host tables are valid.
+5. Stop and join plugin workers before successful `shutdown`; free the opaque instance in `destroy`.
+6. Package a ZIP with root-level `plugin.yml`, `abi-version: 2`, and the declared DLL. Drop it onto the island to install or update.
 
-## Development workflow
+The SDK wraps common calls and builds draw lists. Advanced controls and settings changes use the raw ABI. Plugin drawing does not run on the render thread.
 
-1. Define a `cdylib` crate and depend on `winisland-plugin-api = "0.6"`.
-2. Export one `winisland_plugin_entry_v1` function returning a static descriptor.
-3. Validate `PluginCreateInfoV1`, query declared services, and return an opaque instance handle.
-4. Keep all host-issued resource IDs in plugin-owned state.
-5. Stop workers and release resources in `shutdown`, then free only plugin memory in `destroy`.
-6. Run `cargo check`, strict Clippy, and `cargo build --release`.
-7. Package one entry DLL plus optional dependencies/assets and install the ZIP by dropping it onto WinIsland.
+## Compatibility
 
-## Compatibility contract
-
-Crate version `0.6.x` exposes ABI version `1`. Runtime compatibility is selected by `ABI_VERSION_1`, each structure's `struct_size`, and service table versions, not by Rust crate metadata at DLL load time.
-
-All public ABI structures use `#[repr(C)]`. Plugins should initialize versioned structures with `Default` where available and must not assume fields beyond the advertised `struct_size` exist. A new incompatible ABI requires a new entry symbol and ABI version rather than changing ABI v1 in place.
-
-## Where to look next
-
-Build the [minimal plugin](/plugin-dev/quickstart), then read [ABI and lifecycle](/plugin-dev/abi-lifecycle) before adding worker threads or callbacks. The [service reference](/plugin-dev/services) documents exact limits and ownership rules, while [packaging and installation](/plugin-dev/packaging) covers distribution and update failures.
+Crate `0.8`, top-level `ABI_VERSION_2`, and service-table `IFACE_VERSION_1` are different version numbers. Check `struct_size` and `version` before reading a table. ABI v1 DLLs require source migration and repackaging; changing `plugin.yml` alone cannot convert one.

@@ -1,30 +1,22 @@
 # 插件快速开始
 
-本指南会构建一个完整的 ABI v1 DLL，并发布一个持续显示的 Context。示例会校验所有必需输入，保存宿主签发的资源 ID，在 shutdown 中释放资源，并且只在 `destroy` 中释放不透明实例。
+本例构建完整的 ABI v2 DLL，发布一个 Context。示例校验宿主输入，持有资源，在 shutdown 中释放资源，并在 destroy 中释放不透明实例。
 
 ## 前置条件
 
-- Windows 10 2004 或更高版本，或 Windows 11
-- Stable Rust 和 `x86_64-pc-windows-msvc` 工具链
-- 安装了“使用 C++ 的桌面开发”工作负载的 Visual Studio Build Tools
-- 支持插件 API `0.6` / ABI v1 的 WinIsland
+- Windows 10 2004 或更新版本，或 Windows 11
+- 安装 `x86_64-pc-windows-msvc` 目标的稳定版 Rust
+- Visual Studio C++ 构建工具和 Windows SDK
+- 支持 ABI v2 的 WinIsland
 
-检查工具链：
-
-```powershell
-rustup show
-rustc --version
-cargo --version
-```
-
-## 创建项目
+## 创建库
 
 ```powershell
 cargo new --lib hello-winisland-plugin
 cd hello-winisland-plugin
 ```
 
-在 `Cargo.toml` 中写入以下包、库和依赖配置：
+使用以下 `Cargo.toml`。在 ABI v2 crate 发布到注册表前，先使用此处的仓库源码；发布后可改用匹配的 `winisland-plugin-api = "0.8"` 版本。
 
 ```toml
 [package]
@@ -32,7 +24,7 @@ name = "hello-winisland-plugin"
 version = "0.1.0"
 edition = "2024"
 authors = ["Example Author"]
-description = "Minimal WinIsland ABI v1 plugin"
+description = "Minimal WinIsland ABI v2 plugin"
 repository = "https://github.com/example/hello-winisland-plugin"
 
 [lib]
@@ -40,190 +32,119 @@ name = "hello_winisland_plugin"
 crate-type = ["cdylib"]
 
 [dependencies]
-winisland-plugin-api = "0.6"
+winisland-plugin-api = { git = "https://github.com/WinIslandProject/WinIsland" }
 ```
 
-必须使用 `cdylib`，它会生成带有 ABI 导出入口的原生 DLL。Packager 也会复用包元数据，因此这些字段必须与下面的 `PluginMetadataC` 保持一致。
+包 ID、名称、版本、作者和描述必须与 Descriptor、安装包 manifest 一致。repository URL 会成为 `github-link`。
 
-## 实现插件
-
-将以下内容作为 `src/lib.rs`：
+## 实现 `src/lib.rs`
 
 ```rust
 use std::ffi::c_void;
-use winisland_plugin_api::*;
+use winisland_plugin_api::abi::{
+    ABI_VERSION_2, CAP_CONTEXT, PluginCreateInfoV2, PluginDescriptorV2,
+    PluginHandleV2, PluginStatus,
+};
+use winisland_plugin_api::sdk::{Host, Resource};
+use winisland_plugin_api::PluginMetadataC;
 
 struct Instance {
-    token: PluginToken,
-    context_api: ContextApiV1,
-    context_id: ResourceId,
+    context: Option<Resource>,
 }
 
-static DESCRIPTOR: PluginDescriptorV1 = PluginDescriptorV1 {
-    struct_size: std::mem::size_of::<PluginDescriptorV1>() as u32,
-    abi_version: ABI_VERSION_1,
-    capabilities: CAPABILITY_CONTEXT,
+static DESCRIPTOR: PluginDescriptorV2 = PluginDescriptorV2 {
+    struct_size: std::mem::size_of::<PluginDescriptorV2>() as u32,
+    abi_version: ABI_VERSION_2,
+    capabilities: CAP_CONTEXT,
     metadata: PluginMetadataC::new(
         "hello-winisland-plugin",
         "hello-winisland-plugin",
-        "0.1.0",
+        env!("CARGO_PKG_VERSION"),
         "Example Author",
-        "Minimal WinIsland ABI v1 plugin",
+        "Minimal WinIsland ABI v2 plugin",
     ),
     create: Some(create),
     shutdown: Some(shutdown),
     destroy: Some(destroy),
+    on_tick: None,
 };
 
 unsafe extern "C" fn create(
-    create_info: *const PluginCreateInfoV1,
-    out_handle: *mut PluginHandle,
-) -> PluginResultC {
-    if create_info.is_null() || out_handle.is_null() {
-        return PluginResultC::err("null create argument");
+    info: *const PluginCreateInfoV2,
+    out_handle: *mut PluginHandleV2,
+) -> PluginStatus {
+    if info.is_null() || out_handle.is_null() {
+        return PluginStatus::InvalidArgument;
     }
-
-    // SAFETY: WinIsland 提供可读取的 ABI create-info 前缀。
-    let info = unsafe { &*create_info };
-    if info.struct_size < std::mem::size_of::<PluginCreateInfoV1>() as u32
-        || info.abi_version != ABI_VERSION_1
-        || info.host_api.is_null()
-        || info.plugin_token == INVALID_ID
+    // SAFETY: WinIsland supplies a readable create-info header.
+    let info = unsafe { &*info };
+    if info.struct_size < std::mem::size_of::<PluginCreateInfoV2>() as u32
+        || info.abi_version != ABI_VERSION_2
+        || info.plugin_token == winisland_plugin_api::PluginToken::INVALID
     {
-        return PluginResultC::err("unsupported create info");
+        return PluginStatus::UnsupportedVersion;
     }
-
-    // SAFETY: 校验后的宿主 API 指针在 WinIsland 运行期间保持有效。
-    let host = unsafe { &*info.host_api };
-    // SAFETY: `host` 来自 WinIsland，辅助方法会校验 ABI header。
-    let Some(context_api) = (unsafe { host.context_api() }) else {
-        return PluginResultC::err("context API is unavailable");
+    // SAFETY: The host table remains allocated throughout this instance's lifetime.
+    let host = match unsafe { Host::from_raw(info.host_api, info.plugin_token) } {
+        Ok(host) => host,
+        Err(_) => return PluginStatus::InvalidArgument,
     };
-    let Some(create_context) = context_api.create else {
-        return PluginResultC::err("context create is unavailable");
+    let context = match host
+        .context()
+        .and_then(|api| api.create("Hello WinIsland", "ABI v2 plugin is running"))
+    {
+        Ok(context) => context,
+        Err(_) => return PluginStatus::Internal,
     };
-    if context_api.release.is_none() {
-        return PluginResultC::err("context release is unavailable");
-    }
-
-    let context = ContextDataV1 {
-        priority: PRIORITY_MEDIUM,
-        flags: CONTEXT_FLAG_SHOW_COMPACT,
-        timeout_ms: 0,
-        title: str_to_fixed("Hello WinIsland"),
-        body: str_to_fixed("ABI v1 plugin is running"),
-        compact_text: str_to_fixed("Hello"),
-        ..Default::default()
-    };
-    let mut context_id = INVALID_ID;
-    // SAFETY: 输入和输出在同步调用返回前保持有效。
-    let result = unsafe { create_context(info.plugin_token, &context, &mut context_id) };
-    if result.status != 0 {
-        return result;
-    }
-
     let instance = Box::new(Instance {
-        token: info.plugin_token,
-        context_api,
-        context_id,
+        context: Some(context),
     });
-    // SAFETY: WinIsland 在 `destroy` 之前只把该指针作为不透明 handle 使用。
+    // SAFETY: WinIsland treats this pointer as opaque until destroy.
     unsafe { out_handle.write(Box::into_raw(instance).cast::<c_void>()) };
-    PluginResultC::ok()
+    PluginStatus::Ok
 }
 
-unsafe extern "C" fn shutdown(handle: PluginHandle) -> PluginResultC {
+unsafe extern "C" fn shutdown(handle: PluginHandleV2) -> PluginStatus {
     if handle.is_null() {
-        return PluginResultC::ok();
+        return PluginStatus::InvalidArgument;
     }
-
-    // SAFETY: `handle` 由 `Box<Instance>` 创建，且尚未 destroy。
+    // SAFETY: This handle was created above and has not been destroyed.
     let instance = unsafe { &mut *handle.cast::<Instance>() };
-    if instance.context_id != INVALID_ID {
-        let Some(release) = instance.context_api.release else {
-            return PluginResultC::err("context release is unavailable");
-        };
-        // SAFETY: 该资源属于当前实例的宿主 token。
-        let result = unsafe { release(instance.token, instance.context_id) };
-        if result.status != 0 {
-            return result;
-        }
-        instance.context_id = INVALID_ID;
-    }
-    PluginResultC::ok()
+    drop(instance.context.take());
+    PluginStatus::Ok
 }
 
-unsafe extern "C" fn destroy(handle: PluginHandle) {
+unsafe extern "C" fn destroy(handle: PluginHandleV2) {
     if !handle.is_null() {
-        // SAFETY: shutdown 成功后，WinIsland 只调用一次 destroy。
+        // SAFETY: WinIsland calls destroy once after successful shutdown.
         unsafe { drop(Box::from_raw(handle.cast::<Instance>())) };
     }
 }
 
-#[unsafe(no_mangle)]
 /// # Safety
-/// WinIsland 使用文档规定的 ABI v1 签名调用该函数。
-pub unsafe extern "C" fn winisland_plugin_entry_v1() -> *const PluginDescriptorV1 {
+/// WinIsland calls this exported symbol using the ABI v2 entry signature.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn winisland_plugin_entry_v2() -> *const PluginDescriptorV2 {
     &DESCRIPTOR
 }
 ```
 
-## 校验 DLL
+`PluginStatus` 是数字状态，不包含错误字符串。需要详细诊断时使用 `LogApiV2`。任何导出的 C 回调都不能向外 unwind。
 
-生成 release 二进制前执行：
+## 构建并加载
 
 ```powershell
-cargo check --all-targets
-cargo clippy --all-targets -- -D warnings
+cargo check
+cargo clippy -- -D warnings
 cargo build --release
 ```
 
-DLL 输出到：
+DLL 位于 `target/release/hello_winisland_plugin.dll`。本地开发时可将它放入 WinIsland 插件目录根部，重启应用加载。根目录 DLL 属于没有 `plugin.yml` 的手动安装；同 ID 的打包版本安装前应移除手动 DLL。
 
-```text
-target/release/hello_winisland_plugin.dll
-```
+要分发 ZIP，阅读[打包与安装](/plugin-dev/packaging)。设置 `abi-version: 2`，并让 `entry` 等于 DLL 文件名。WinIsland 运行时也可以直接把 ZIP 拖到岛上。
 
-如果没有生成 DLL，检查 `[lib].crate-type = ["cdylib"]`。如果找不到 linker，请安装或修复 Visual Studio MSVC 构建工具。
+## 扩展示例
 
-## 开发阶段加载
-
-快速本地验证时，可以退出 WinIsland，把 DLL 直接放进 WinIsland 插件目录，再重启 WinIsland。根目录 DLL 会被视为手动安装插件。检查 WinIsland 日志中是否出现：
-
-```text
-Loaded ABI v1 plugin: hello-winisland-plugin ...
-```
-
-或者包含 DLL 名称的校验错误。
-
-手动根 DLL 适合开发，但正式分发应使用 ZIP。打包插件不能自动替换手动安装的根 DLL，更新前需要先删除根 DLL。
-
-## 安全地更新 Context
-
-使用保存的 token 和资源 ID 调用 `ContextApiV1::update`，不要每次刷新都创建新 Context。
-
-```rust
-let updated = ContextDataV1 {
-    title: str_to_fixed("Task complete"),
-    body: str_to_fixed("The release build finished"),
-    compact_text: str_to_fixed("Complete"),
-    timeout_ms: 5_000,
-    ..Default::default()
-};
-
-let result = unsafe {
-    instance.context_api.update.unwrap()(
-        instance.token,
-        instance.context_id,
-        &updated,
-    )
-};
-```
-
-更新会刷新显示顺序并重新开始超时。超时后的 Context 只是不再显示，仍归插件所有，直到插件主动 release 或成功 shutdown。
-
-## 下一步
-
-- 添加线程或保存回调指针前，阅读 [ABI 与生命周期](/plugin-dev/abi-lifecycle)。
-- 通过[宿主服务](/plugin-dev/services)添加 Media、歌词转换、翻译 bundle 或 Host State。
-- 按照[打包与安装](/plugin-dev/packaging)生成可校验的 ZIP。
+- 在[宿主服务](/plugin-dev/services)中了解 Media、Widget、Settings、Image、Store 和歌词接口。
+- 添加回调或线程前阅读 [ABI 与生命周期](/plugin-dev/abi-lifecycle)。
+- [SDK 小组件示例](https://github.com/WinIslandProject/WinIsland/blob/master/crates/winisland-plugin-api/examples/minimal_widget.rs)展示了 `DrawListBuilder` 的使用。
