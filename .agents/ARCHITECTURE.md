@@ -163,15 +163,19 @@ list, resolves owned images, and prepares immutable drawing commands before
 rendering. `src/ui/expanded/widget_view.rs` and the settings preview replay
 those commands with host-side clipping, scaling, and alpha. No plugin callback
 runs on the render thread. Invalid lists are rejected; repeated malformed
-widget frames can disable that widget.
+widget frames can disable that widget. The widget's logical size comes from
+the configured expanded grid; collapse animation scales the replay without
+changing that size, so text layout remains stable in the settings preview.
 
 Unload joins the host worker, calls plugin `shutdown`, then `destroy`, and only
-then unloads the DLL. A failed shutdown keeps the DLL loaded. Release builds
-still use `panic = "abort"`: a panic in an `extern "C"` plugin callback can
+then unloads the DLL. A failed shutdown, including cleanup of a partial
+`create`, keeps the DLL and host service tables allocated until process exit so
+remaining plugin threads can finish safely.
+The plugin must join its own threads before reporting successful shutdown.
+Release builds still use `panic = "abort"`: a panic in an `extern "C"` plugin callback can
 terminate the process. The host writes an active-plugin marker before callbacks;
 on the next start it disables plugins named by leftover markers and reports
-them. This recovery path has been verified with an isolated DLL runner, while
-the real application UI check and final ADR-0012 decision remain pending.
+them. The first process still exits on callback panic.
 
 ---
 
