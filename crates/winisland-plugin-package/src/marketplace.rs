@@ -196,7 +196,15 @@ async fn validate_catalog(
     let mut plugins = Vec::with_capacity(document.plugins.len());
     let mut icon_downloads = Vec::new();
     for entry in document.plugins {
-        validate_plugin_entry(&entry, expected_abi)?;
+        validate_plugin_entry(&entry)?;
+        if entry.abi_version != expected_abi {
+            log::info!(
+                "Skipping marketplace plugin '{}' with ABI version {} (expected {expected_abi})",
+                entry.id,
+                entry.abi_version
+            );
+            continue;
+        }
         if !ids.insert(entry.id.to_ascii_lowercase()) {
             return Err(format!("Duplicate plugin ID '{}'", entry.id));
         }
@@ -319,7 +327,7 @@ async fn download_catalog_icon(
     Ok(bytes)
 }
 
-fn validate_plugin_entry(entry: &CatalogPlugin, expected_abi: u32) -> Result<(), String> {
+fn validate_plugin_entry(entry: &CatalogPlugin) -> Result<(), String> {
     validate_plugin_id(&entry.id)?;
     validate_text("plugin name", &entry.name, 127)?;
     validate_text("plugin author", &entry.author, 127)?;
@@ -342,12 +350,6 @@ fn validate_plugin_entry(entry: &CatalogPlugin, expected_abi: u32) -> Result<(),
     validate_sha256(&entry.sha256)?;
     if entry.size == 0 || entry.size > MAX_PACKAGE_BYTES {
         return Err(format!("Plugin '{}' has an invalid package size", entry.id));
-    }
-    if entry.abi_version != expected_abi {
-        return Err(format!(
-            "Plugin '{}' requires unsupported ABI version {}",
-            entry.id, entry.abi_version
-        ));
     }
     validate_version(&entry.min_winisland_version)?;
     if entry.categories.len() > 16
