@@ -6,8 +6,8 @@ use winisland_platform::{HostBackdropParams, TrayAction, WindowSize};
 
 use crate::core::persistence::{get_config_path, load_config};
 use crate::platform::{WindowRef, window};
-use crate::plugin::marketplace::{self, MarketplacePlugin};
-use crate::plugin::zip_loader;
+use winisland_plugin_package::activate as zip_loader;
+use winisland_plugin_package::marketplace::{self, MarketplacePlugin};
 use winisland_render::RendererOptions;
 
 use super::App;
@@ -83,9 +83,23 @@ impl App {
                 }
             }
             Some(crate::window::settings::PluginSettingsRequest::Uninstall { id }) => {
+                if let Some(host) = &self.plugin_host
+                    && let Err(error) = host.unload_if_loaded(&id)
+                {
+                    if let Some(settings) = self.settings.as_mut() {
+                        settings.set_plugin_status(
+                            winisland_core::i18n::tr_args(
+                                "plugin_uninstall_failed",
+                                &[&error.to_string()],
+                            ),
+                            false,
+                        );
+                    }
+                    return;
+                }
                 let result = self.plugin_mgr.uninstall_plugin(&id);
                 if result.is_ok() {
-                    crate::plugin::manager::drain_widget_events(&mut self.widget_mgr);
+                    self.refresh_v2_widgets();
                 }
                 let plugin_inventory = result
                     .is_ok()
@@ -235,8 +249,22 @@ impl App {
 
         let plugin_dir = self.plugin_mgr.plugin_dir.clone();
         let zip_path = path.to_path_buf();
-        self.pending_install =
-            Job::spawn(move || zip_loader::extract_plugin(&zip_path, &plugin_dir));
+        self.pending_install = Job::spawn(move || {
+            zip_loader::extract_plugin(
+                &zip_path,
+                &plugin_dir,
+                winisland_plugin_api::abi::ABI_VERSION_2,
+            )
+            .map_err(|error| {
+                if error.contains("Unsupported plugin ABI version 1") {
+                    format!(
+                        "该插件使用已废弃的 ABI v1，请升级或联系作者；建议先禁用该插件。 {error}"
+                    )
+                } else {
+                    error
+                }
+            })
+        });
         log::info!("Plugin extraction started in background thread");
     }
 
@@ -248,12 +276,17 @@ impl App {
             settings.set_marketplace_loading();
         }
         let (job, done) = Job::pending();
-        tokio::spawn(async move { done.send(marketplace::load_catalog().await) });
+        tokio::spawn(async move {
+            let result = marketplace::load_catalog(winisland_plugin_api::abi::ABI_VERSION_2).await;
+            done.send(result);
+        });
         self.pending_marketplace_catalog = job;
     }
 
     fn install_marketplace_plugin(&mut self, plugin: MarketplacePlugin) {
-        if plugin.revoked_reason.is_some() || !plugin.is_compatible() {
+        if plugin.revoked_reason.is_some()
+            || !plugin.is_compatible(winisland_core::config::APP_VERSION)
+        {
             if let Some(settings) = self.settings.as_mut() {
                 settings.finish_marketplace_install();
                 settings.set_plugin_status(
@@ -283,7 +316,12 @@ impl App {
             );
         }
         let (job, done) = Job::pending();
-        tokio::spawn(async move { done.send(marketplace::download_plugin(&plugin).await) });
+        tokio::spawn(async move {
+            let result =
+                marketplace::download_plugin(&plugin, winisland_plugin_api::abi::ABI_VERSION_2)
+                    .await;
+            done.send(result);
+        });
         self.pending_marketplace_download = job;
     }
 
@@ -293,7 +331,7 @@ impl App {
             return;
         }
 
-        crate::plugin::manager::drain_widget_events(&mut self.widget_mgr);
+        self.refresh_v2_widgets();
         let mut config = load_config();
         let plugin_widgets = self.widget_mgr.configurable_widgets();
         if winisland_core::config::normalize_active_plugin_widget_layout(
@@ -303,7 +341,12 @@ impl App {
         ) {
             crate::core::persistence::save_config(&config);
         }
-        let plugin_settings_pages = crate::plugin::manager::plugin_settings_pages();
+        let plugin_settings_pages = self
+            .plugin_host
+            .as_ref()
+            .and_then(|host| host.settings_pages_snapshot())
+            .map(|(_, pages)| pages)
+            .unwrap_or_default();
         let target_monitor = self
             .window
             .as_ref()
@@ -314,6 +357,7 @@ impl App {
             plugin_widgets,
             plugin_settings_pages,
         );
+        settings.set_plugin_host(self.plugin_host.clone());
         let Some(renderer) = self.renderer.as_mut() else {
             log::error!("Cannot open settings without the shared D3D12 renderer");
             return;

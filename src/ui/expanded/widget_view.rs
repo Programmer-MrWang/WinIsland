@@ -1,44 +1,38 @@
 use crate::icons::arrows::draw_arrow_left;
-use crate::plugin::types::{INTERFACE_VERSION_1, WidgetDrawContextV1};
 use crate::ui::widget::expanded::{draw_widget, widget_animates, widget_grid_layout};
+use std::collections::HashMap;
 use winisland_core::config::{
     PluginWidgetSlot, WIDGET_GRID_SLOTS, WidgetSlot, first_free_anchor, plugin_widget_slot,
     span_cells, widget_footprint,
 };
 use winisland_core::widgets::WidgetManager;
+use winisland_plugin_host::draw::replay::{PreparedFrame, replay};
+use winisland_plugin_host::host::PluginHost;
 use winisland_render::{Painter, Rect, Rgba};
 
 #[allow(clippy::too_many_arguments)]
-pub fn draw_plugin_widget(
+pub fn draw_prepared_widget(
     painter: Painter<'_>,
-    widget: &winisland_core::widgets::PluginWidget,
+    widget_id: u64,
+    frame: &PreparedFrame,
     x: f32,
     y: f32,
     width: f32,
     height: f32,
-    scale: f32,
     alpha: u8,
 ) {
-    let Some(callback) = crate::plugin::manager::acquire_widget_draw(widget.id) else {
-        return;
-    };
-    let inv_scale = if scale > 0.0 { 1.0 / scale } else { 1.0 };
     let save_count = painter.save();
     painter.clip_rect_with_anti_alias(Rect::from_xywh(x, y, width, height), false);
     painter.translate(winisland_render::Vec2::new(x, y));
-    crate::plugin::manager::reset_draw_transform();
-    let ctx = WidgetDrawContextV1 {
-        struct_size: std::mem::size_of::<WidgetDrawContextV1>() as u32,
-        version: INTERFACE_VERSION_1,
-        width: width * inv_scale,
-        height: height * inv_scale,
-        scale,
-        alpha,
-        canvas_handle: painter.plugin_canvas_handle_v1(),
-        draw: crate::plugin::manager::draw_api(),
-    };
-    callback.draw(&ctx);
+    painter.scale(winisland_render::Vec2::new(
+        width / frame.logical_width,
+        height / frame.logical_height,
+    ));
+    let elapsed = replay(frame, painter, alpha);
     painter.restore_to(save_count);
+    if elapsed.as_millis() > 3 {
+        log::warn!("Plugin widget {widget_id} replay took {elapsed:?}");
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -50,9 +44,13 @@ pub fn draw_widget_page(
     h: f32,
     alpha: u8,
     scale: f32,
+    expanded_width: f32,
+    expanded_height: f32,
     widget_layout: &[WidgetSlot],
     plugin_widget_layout: &[PluginWidgetSlot],
     plugin_widgets: &WidgetManager,
+    plugin_frames: &HashMap<u64, PreparedFrame>,
+    plugin_host: Option<&PluginHost>,
     text_color: Rgba,
     show_page_switcher: bool,
 ) -> bool {
@@ -60,6 +58,7 @@ pub fn draw_widget_page(
 
     if alpha > 20 {
         let layout = widget_grid_layout(ox, oy, w, h, scale);
+        let logical_layout = widget_grid_layout(0.0, 0.0, expanded_width, expanded_height, 1.0);
 
         let mut occupied = [false; WIDGET_GRID_SLOTS];
         for slot in 0..WIDGET_GRID_SLOTS {
@@ -107,9 +106,17 @@ pub fn draw_widget_page(
                 occupied[cell] = true;
             }
             let (slot_x, slot_y, tile_w, tile_h) = layout.footprint_rect_span(anchor, span);
-            draw_plugin_widget(
-                painter, widget, slot_x, slot_y, tile_w, tile_h, scale, alpha,
-            );
+            if let Some(host) = plugin_host
+                && plugin_frames.contains_key(&widget.id)
+            {
+                let (_, _, logical_w, logical_h) = logical_layout.footprint_rect_span(anchor, span);
+                let _ = host.set_widget_logical_size(widget.id, logical_w, logical_h);
+            }
+            if let Some(frame) = plugin_frames.get(&widget.id) {
+                draw_prepared_widget(
+                    painter, widget.id, frame, slot_x, slot_y, tile_w, tile_h, alpha,
+                );
+            }
         }
     }
 

@@ -1,6 +1,28 @@
 # Changelog
 
-This changelog lists published `winisland-plugin-api` releases only. Release notes are added when a version is published; there is no `Unreleased` section.
+This changelog lists `winisland-plugin-api` versions. The website displays this file as its plugin API update log.
+
+## 0.8.0 - Sep 27, 2026
+
+Changed:
+
+- **Breaking**: replaced the native ABI v1 entry with `winisland_plugin_entry_v2` and `PluginDescriptorV2`; ABI v1 DLLs must be rebuilt and packaged with `abi-version: 2`
+- Replaced `PluginResultC` with `PluginStatus` and moved optional `on_tick` to the plugin descriptor
+- Replaced render-thread widget callbacks with complete draw lists submitted from plugin workers, validated by the host, and replayed without entering plugin code
+- Updated `PluginPackager` to emit ABI v2 manifests and validate the built DLL descriptor before producing a ZIP
+- Declared `winisland-plugin-api` and its publishable `winisland-plugin-package` dependency as GPL-3.0-only
+
+Added:
+
+- Eleven versioned host interfaces for Context, Media, i18n, Host State, Widget, Lyrics Transform, Settings, Text, Image, Store, and Log
+- An opt-in Rust SDK with owned resource handles, widget draw-list builders, image helpers, persistent Store operations, and simple settings-page helpers
+- Draw-list operations for clipping, transforms, alpha, shapes, gradients, strokes, shadows, images, and UTF-8 text with explicit font families
+- Album-art access, rich declarative settings items, plugin-scoped persistent storage, and host-state subscriptions
+
+Fixed:
+
+- Bounded draw-list validation and resource ownership checks before rendering
+- DLL lifetime protection when shutdown or partial-create cleanup fails
 
 ## 0.7.0 - Sep 13, 2026
 

@@ -121,7 +121,7 @@ export const copy = {
       onThisPage: 'Documentation',
       pages: {
         guide: 'What is WinIsland?',
-        faq: 'Thoughts & FAQ (中文)',
+        faq: 'Thoughts & FAQ',
         'getting-started': 'Getting started',
         download: 'Download',
         'plugin-dev': 'Plugin development',

@@ -3,6 +3,7 @@ mod expanded;
 mod mini;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 pub(crate) use mini::{
     lyric_font_size as mini_lyric_font_size, lyric_insets as mini_lyric_insets,
@@ -20,6 +21,8 @@ use winisland_core::config::{
     CompactWidgetSlot, LyricTransitionAnimation, PluginWidgetSlot, WidgetSlot,
 };
 use winisland_core::lyrics::LyricHighlight;
+use winisland_plugin_host::draw::replay::PreparedFrame;
+use winisland_plugin_host::host::PluginHost;
 use winisland_render::DrawingContext;
 use winisland_render::{BlurSpec, Image, Painter, Path, Point, RasterSurface, Rect, Rgba, Vec2};
 
@@ -65,9 +68,13 @@ pub struct StyleParams<'a> {
     pub use_blur: bool,
     pub font_size: f32,
     pub dt: f32,
+    pub expanded_width: f32,
+    pub expanded_height: f32,
     pub widget_layout: &'a [WidgetSlot],
     pub plugin_widget_layout: &'a [PluginWidgetSlot],
     pub plugin_widgets: &'a winisland_core::widgets::WidgetManager,
+    pub plugin_frames: &'a HashMap<u64, PreparedFrame>,
+    pub plugin_host: Option<&'a PluginHost>,
     pub compact_widget_layout: &'a [CompactWidgetSlot],
 }
 
@@ -324,12 +331,16 @@ fn draw_expanded_layer(
         use_blur: style.use_blur,
         font_size: style.font_size,
         dt: style.dt,
+        expanded_width: style.expanded_width,
+        expanded_height: style.expanded_height,
         text_color: Rgba::WHITE,
         text_color_sec: Rgba::WHITE,
         palette,
         widget_layout: style.widget_layout,
         plugin_widget_layout: style.plugin_widget_layout,
         plugin_widgets: style.plugin_widgets,
+        plugin_frames: style.plugin_frames,
+        plugin_host: style.plugin_host,
     })
 }
 
