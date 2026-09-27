@@ -2,6 +2,8 @@
 
 ABI v2 types and SDK for trusted native WinIsland plugins. Plugins are in-process Windows DLLs. The published ABI layouts and opcodes are defined in `src/abi`, `src/types/v2`, and `src/draw/v2.rs`.
 
+License: GPL-3.0-only.
+
 ## Start a plugin
 
 Create a Rust `cdylib` with `winisland-plugin-api` as a dependency. Export `winisland_plugin_entry_v2` returning a static `PluginDescriptorV2`. The descriptor declares capabilities and `create`, `shutdown`, and `destroy` callbacks. `on_tick` is optional and belongs to the plugin descriptor.
@@ -11,7 +13,7 @@ Create a Rust `cdylib` with `winisland-plugin-api` as a dependency. Export `wini
 crate-type = ["cdylib"]
 
 [dependencies]
-winisland-plugin-api = "0.7"
+winisland-plugin-api = "0.8"
 ```
 
 The host passes a plugin token and an instance-owned `PluginHostV2` table to `create`. Query service tables through the SDK `Host` wrapper or through `PluginHostV2.query_interface`. The eleven interfaces cover context, media, translations, host state, widgets, lyrics, settings, text, images, store, and logging. Each resource belongs to the plugin token that created it.
@@ -42,7 +44,7 @@ A package is a ZIP containing `plugin.yml` and the DLL named by its `entry` fiel
 
 ```toml
 [dev-dependencies]
-winisland-plugin-api = { version = "0.7", features = ["packager"] }
+winisland-plugin-api = { version = "0.8", features = ["packager"] }
 ```
 
 ```rust,no_run

@@ -1,11 +1,14 @@
 [package]
 name = "winisland-plugin-package"
-version.workspace = true
+version = "0.8.0"
 edition = "2024"
+description = "Packaging, activation, and marketplace catalog support for WinIsland plugins"
+repository = "https://github.com/WinIslandProject/WinIsland"
+license = "GPL-3.0-only"
 
 [features]
 default = []
-marketplace = ["dep:base64", "dep:dirs", "dep:image", "dep:log", "dep:reqwest", "dep:tokio", "dep:winisland-core"]
+marketplace = ["dep:base64", "dep:dirs", "dep:image", "dep:log", "dep:reqwest", "dep:tokio"]
 
 [dependencies]
 base64 = { version = "0.23.1", optional = true }
@@ -21,5 +24,4 @@ serde_yaml = "0.9"
 sha2 = "0.11.0"
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"], optional = true }
-winisland-core = { path = "../winisland-core", optional = true }
 zip = "8.6.0"

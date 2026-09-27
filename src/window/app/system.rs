@@ -290,7 +290,9 @@ impl App {
     }
 
     fn install_marketplace_plugin(&mut self, plugin: MarketplacePlugin) {
-        if plugin.revoked_reason.is_some() || !plugin.is_compatible() {
+        if plugin.revoked_reason.is_some()
+            || !plugin.is_compatible(winisland_core::config::APP_VERSION)
+        {
             if let Some(settings) = self.settings.as_mut() {
                 settings.finish_marketplace_install();
                 settings.set_plugin_status(

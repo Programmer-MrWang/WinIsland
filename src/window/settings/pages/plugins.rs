@@ -425,7 +425,7 @@ impl SettingsApp {
         if plugin.revoked_reason.is_some() {
             return MarketplaceAction::Revoked;
         }
-        if !plugin.is_compatible() {
+        if !plugin.is_compatible(winisland_core::config::APP_VERSION) {
             return MarketplaceAction::Incompatible;
         }
         match self

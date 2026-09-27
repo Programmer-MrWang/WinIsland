@@ -15,7 +15,6 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::activate as zip_loader;
-use winisland_core::config::APP_VERSION;
 
 mod cache;
 mod version;
@@ -71,8 +70,8 @@ pub struct MarketplacePlugin {
 }
 
 impl MarketplacePlugin {
-    pub fn is_compatible(&self) -> bool {
-        compare_versions(APP_VERSION, &self.min_winisland_version)
+    pub fn is_compatible(&self, app_version: &str) -> bool {
+        compare_versions(app_version, &self.min_winisland_version)
             .is_some_and(|ordering| ordering != Ordering::Less)
     }
 
