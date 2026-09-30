@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::{LocalDateTime, PlatformError, TrayAction, TrayLabels, TrayTheme};
+use crate::{Hotkey, LocalDateTime, PlatformError, TrayAction, TrayLabels, TrayTheme};
 
 /// Shell services are synchronous. Call blocking operations away from rendering;
 /// returned guards own their resources, errors never panic, and methods are not reentrant.
@@ -46,6 +46,10 @@ pub trait ShellIntegration {
     fn tray_update(&self, theme: TrayTheme, labels: TrayLabels) -> Result<(), PlatformError>;
     /// Drains pending tray actions; empty means no action.
     fn poll_tray_events(&self) -> Vec<TrayAction>;
+    /// Registers a system-wide hotkey, or returns an unavailable/backend error.
+    fn register_hotkey(&self, hotkey: Hotkey) -> Result<(), PlatformError>;
+    /// Drains presses of the registered hotkey; zero means no press.
+    fn poll_hotkey_presses(&self) -> u32;
     /// Activates a packaged app on a dedicated STA thread; false means not found.
     fn activate_app(&self, app_user_model_id: &str) -> Result<bool, PlatformError>;
     /// Activates a media app on a dedicated STA thread; false means not found.

@@ -1,4 +1,3 @@
-use crate::icons::arrows::draw_arrow_left;
 use crate::ui::widget::expanded::{draw_widget, widget_animates, widget_grid_layout};
 use std::collections::HashMap;
 use winisland_core::config::{
@@ -52,7 +51,6 @@ pub fn draw_widget_page(
     plugin_frames: &HashMap<u64, PreparedFrame>,
     plugin_host: Option<&PluginHost>,
     text_color: Rgba,
-    show_page_switcher: bool,
 ) -> bool {
     let mut animating = false;
 
@@ -118,17 +116,6 @@ pub fn draw_widget_page(
                 );
             }
         }
-    }
-
-    if show_page_switcher && alpha > 0 {
-        draw_arrow_left(
-            painter,
-            ox + 7.5 * scale,
-            oy + h / 2.0,
-            alpha,
-            scale,
-            text_color,
-        );
     }
 
     animating

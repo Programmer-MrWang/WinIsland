@@ -1,11 +1,12 @@
 use crate::ui::widget::resource_usage::{
-    MetricUsage, alpha_color, metric_color, usage_color, with_compact_config, with_resource_usage,
+    COMPACT_METRIC_GAP, MetricUsage, alpha_color, compact_metric_width, metric_color, usage_color,
+    with_compact_config, with_resource_usage,
 };
 use winisland_core::config::{ResourceMetricConfig, ResourceMetricStyle};
 use winisland_render::text::{DrawTextCachedParams, FontManager};
 use winisland_render::{Angle, Painter, Point, Radius, Rect, Rgba, StrokeCap};
 
-const METRIC_GAP: f32 = 4.0;
+const RING_LABEL_GAP: f32 = 4.0;
 
 pub(super) fn draw(painter: Painter<'_>, rect: Rect, scale: f32, alpha: u8) {
     with_compact_config(|config| {
@@ -14,16 +15,18 @@ pub(super) fn draw(painter: Painter<'_>, rect: Rect, scale: f32, alpha: u8) {
             return;
         }
         with_resource_usage(config, |usage| {
-            let gap = METRIC_GAP * scale;
-            let metric_width = (rect.width() - gap * enabled.len().saturating_sub(1) as f32)
-                / enabled.len() as f32;
-            for (index, metric) in enabled.into_iter().enumerate() {
-                let bounds = Rect::from_xywh(
-                    rect.left + index as f32 * (metric_width + gap),
-                    rect.top,
-                    metric_width,
-                    rect.height(),
-                );
+            let gap = COMPACT_METRIC_GAP * scale;
+            let natural_width = enabled
+                .iter()
+                .map(|metric| compact_metric_width(metric.style) * scale)
+                .sum::<f32>()
+                + gap * enabled.len().saturating_sub(1) as f32;
+            let fit = (rect.width() / natural_width.max(f32::EPSILON)).min(1.0);
+            let mut x = rect.left + (rect.width() - natural_width * fit).max(0.0) / 2.0;
+            for metric in enabled {
+                let metric_width = compact_metric_width(metric.style) * scale * fit;
+                let bounds = Rect::from_xywh(x, rect.top, metric_width, rect.height());
+                x += metric_width + gap * fit;
                 draw_metric(
                     painter,
                     bounds,
@@ -120,11 +123,22 @@ fn draw_ring(
 ) {
     let value = usage.value.unwrap_or_default();
     let accent = usage_color(metric_color(config.color), value);
+    let fonts = FontManager::global();
+    let label_size = (6.0 * scale).max(4.5);
+    let label_w = fonts.measure_text_cached(
+        config.kind.label(),
+        label_size,
+        winisland_render::FontStyle::bold(),
+    );
+    let label_gap = RING_LABEL_GAP * scale;
     let diameter = (rect.height() * 0.72)
-        .min(rect.width() * 0.42)
+        .min(rect.width() - label_w - label_gap)
         .max(10.0 * scale);
-    let inset = 1.0 * scale;
-    let center = Point::new(rect.right - inset - diameter / 2.0, rect.center_y());
+    let group_left = rect.center_x() - (label_w + label_gap + diameter) / 2.0;
+    let center = Point::new(
+        group_left + label_w + label_gap + diameter / 2.0,
+        rect.center_y(),
+    );
     let ring = Rect::from_xywh(
         center.x - diameter / 2.0,
         center.y - diameter / 2.0,
@@ -148,7 +162,6 @@ fn draw_ring(
             StrokeCap::Round,
         );
     }
-    let fonts = FontManager::global();
     let mut value_size = (diameter * 0.22).max(4.0);
     let max_value_width = diameter * 0.78;
     let mut value_w =
@@ -168,11 +181,10 @@ fn draw_ring(
         color: Rgba::from_argb(alpha, 255, 255, 255),
         blur: None,
     });
-    let label_size = (6.0 * scale).max(4.5);
     fonts.draw_text_cached(DrawTextCachedParams {
         painter,
         text: config.kind.label(),
-        x: rect.left + inset,
+        x: group_left,
         y: rect.center_y() + label_size * 0.34,
         size: label_size,
         bold: true,

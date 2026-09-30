@@ -7,17 +7,20 @@ use crate::ui::compact::CompactOverlayState;
 use crate::ui::expanded::music_view::{
     get_progress_bar_rect, set_progress_dragging, set_progress_hover,
 };
+use crate::ui::expanded::pager::ExpandedPage;
 use crate::utils::mouse::{
     double_click_interval, get_global_cursor_pos, is_cursor_hidden, is_foreground_fullscreen,
     is_left_button_pressed, is_point_in_continuous_rounded_rect, is_point_in_rect,
 };
-use winisland_core::config::{MIN_HIDDEN_WIDTH, WidgetKind};
+use winisland_core::config::MIN_HIDDEN_WIDTH;
 
 use super::{App, DragAxis, RIGHT_DRAG_THRESHOLD};
 
 const INTERACTIVE_FRAME_INTERVAL: Duration = Duration::from_millis(20);
 const PLAYBACK_FRAME_INTERVAL: Duration = Duration::from_millis(20);
 const IDLE_FRAME_INTERVAL: Duration = Duration::from_millis(50);
+const SETTLE_PIXELS: f32 = 0.1;
+const SETTLE_PIXEL_VELOCITY: f32 = 0.05;
 const HIDDEN_FRAME_INTERVAL: Duration = Duration::from_millis(100);
 pub(super) const WORKING_SET_TRIM_INTERVAL: Duration = Duration::from_secs(20);
 const RENDERER_RECOVERY_INTERVAL: Duration = Duration::from_secs(1);
@@ -63,6 +66,7 @@ impl App {
             Self::enforce_overlay_window(&window);
         }
         self.handle_tray_events(&window);
+        self.handle_hide_hotkey(&window, now);
         self.reload_config_if_changed(&window);
         if self.is_hidden() && !self.can_hide() {
             self.reveal_island();
@@ -120,7 +124,7 @@ impl App {
             self.springs.w.value as f64,
             self.springs.h.value as f64,
             self.springs.r.value as f64,
-        );
+        ) || self.pager_contains(rel_x, rel_y, &layout);
         let is_over_hidden_reveal = self.is_hidden()
             && (is_hovering_island
                 || (self.config.hidden_width <= MIN_HIDDEN_WIDTH
@@ -135,9 +139,7 @@ impl App {
                     )));
         let cursor_interaction_suppressed = self.is_cursor_suppressed && self.touch_id.is_none();
         let interaction_suppressed = cursor_interaction_suppressed
-            || (self.config.fullscreen_auto_hide
-                && self.is_fullscreen_suppressed
-                && !self.hide.overlay_reveal);
+            || (self.fullscreen_hide_active() && !self.hide.overlay_reveal);
         let is_hovering_visible = !interaction_suppressed && is_hovering_island;
         let is_on_hidden_reveal = !interaction_suppressed
             && is_over_hidden_reveal
@@ -145,7 +147,7 @@ impl App {
             && self.springs.hide.value >= 0.999;
 
         let passive_reveal_active = self.is_fullscreen_suppressed
-            && !self.config.fullscreen_auto_hide
+            && !self.fullscreen_hide_active()
             && is_over_hidden_reveal;
         if self.hidden_reveal_click.update(
             passive_reveal_active,
@@ -196,6 +198,7 @@ impl App {
 
         self.update_seeking_input(&window, rel_x);
         self.update_progress_hover(rel_x, rel_y, offset_x, island_y, music_active);
+        self.update_close_hover(&window, rel_x, rel_y, &layout, !interaction_suppressed, dt);
         self.update_hide_drag(&window, px, py, dt);
         self.update_expand_collapse_click(&window, is_hovering_visible);
 
@@ -369,8 +372,55 @@ impl App {
             self.geom.monitor_size.1,
         );
         self.is_cursor_suppressed = is_cursor_hidden();
-        let should_hide_for_fullscreen =
-            self.config.fullscreen_auto_hide && self.is_fullscreen_suppressed;
+        if self.is_fullscreen_suppressed && !prev_fullscreen {
+            self.fullscreen_hide_paused = false;
+        }
+        self.apply_fullscreen_hide(window, now);
+        if self.is_fullscreen_suppressed != prev_fullscreen {
+            log::info!(
+                "Fullscreen state: {}",
+                if self.is_fullscreen_suppressed {
+                    "active"
+                } else {
+                    "normal"
+                }
+            );
+        }
+    }
+
+    fn handle_hide_hotkey(&mut self, window: &WindowRef, now: Instant) {
+        if crate::platform::shell()
+            .poll_hotkey_presses()
+            .is_multiple_of(2)
+        {
+            return;
+        }
+        if self.fullscreen_hide_active() {
+            self.fullscreen_hide_paused = true;
+            log::info!("Fullscreen auto-hide paused by hotkey");
+            self.apply_fullscreen_hide(window, now);
+        } else if self.fullscreen_hide_paused
+            && self.config.fullscreen_auto_hide
+            && self.is_fullscreen_suppressed
+        {
+            self.fullscreen_hide_paused = false;
+            log::info!("Fullscreen auto-hide resumed by hotkey");
+            self.apply_fullscreen_hide(window, now);
+        } else if self.is_hidden() {
+            self.reveal_island();
+            log::info!("Island revealed by hotkey");
+        } else if self.prepare_hide(window) {
+            self.expanded = false;
+            self.reset_page();
+            self.hide.manual = true;
+            self.hide.auto = false;
+            log::info!("Island hidden by hotkey");
+        }
+        window.request_redraw();
+    }
+
+    fn apply_fullscreen_hide(&mut self, window: &WindowRef, now: Instant) {
+        let should_hide_for_fullscreen = self.fullscreen_hide_active();
         if should_hide_for_fullscreen != self.hide.fullscreen {
             if should_hide_for_fullscreen {
                 self.hide.fullscreen = true;
@@ -381,7 +431,7 @@ impl App {
                 };
                 if hide_started {
                     self.expanded = false;
-                    self.widget_view = false;
+                    self.reset_page();
                     self.hide.notification_reveal = false;
                     self.hide.overlay_reveal = false;
                     self.attention_pulse_started = Some(now);
@@ -399,16 +449,6 @@ impl App {
             }
             window.request_redraw();
         }
-        if self.is_fullscreen_suppressed != prev_fullscreen {
-            log::info!(
-                "Fullscreen state: {}",
-                if self.is_fullscreen_suppressed {
-                    "active"
-                } else {
-                    "normal"
-                }
-            );
-        }
     }
 
     fn poll_media_info(&mut self, window: &WindowRef) -> (bool, bool) {
@@ -425,13 +465,9 @@ impl App {
         let music_active = self.media_active();
         let media_is_playing = music_active && self.current_media_info().is_playing;
         let music_became_available = music_active && !self.music_page_available;
-        self.music_page_available = music_active;
-        if !self.music_page_available && self.expanded {
-            self.widget_view = true;
-            self.springs.view.value = 1.0;
-            self.springs.view.velocity = 0.0;
-        } else if music_became_available && self.expanded {
-            self.widget_view = false;
+        self.set_music_page_available(music_active);
+        if music_became_available && self.expanded {
+            self.current_page = ExpandedPage::Music;
         }
         let media = self.current_media_info();
         let title = media.title.clone();
@@ -468,7 +504,7 @@ impl App {
     ) -> bool {
         let is_paused_idle = music_active && !media_is_playing;
         let overlay_present = !self.expanded && !self.is_hidden();
-        let fullscreen_hidden = self.config.fullscreen_auto_hide && self.is_fullscreen_suppressed;
+        let fullscreen_hidden = self.fullscreen_hide_active();
         let volume_state = if overlay_present && (!fullscreen_hidden || self.hide.overlay_reveal) {
             CompactOverlayState::Present
         } else if fullscreen_hidden || (self.hide.auto && !self.hide.manual) {
@@ -542,16 +578,11 @@ impl App {
             window.request_redraw();
         }
         let has_widgets = !self.components_hidden
-            && (self.config.widget_layout.iter().any(|entry| {
-                entry
-                    .widget
-                    .is_some_and(|widget| widget != WidgetKind::Settings)
-            }) || !self.config.plugin_widget_layout.is_empty()
-                || self
-                    .config
-                    .compact_widget_layout
-                    .iter()
-                    .any(|entry| entry.widget.is_some())
+            && (self
+                .config
+                .compact_widget_layout
+                .iter()
+                .any(|entry| entry.widget.is_some())
                 || matches!(
                     self.ctx_mgr.current_mini(),
                     Some(winisland_core::context::MiniContent::Plugin(_))
@@ -595,8 +626,7 @@ impl App {
 
     fn update_seeking_input(&mut self, window: &WindowRef, rel_x: i32) {
         if self.seek.active && self.input_pressed() {
-            let page_shift = self.springs.view.value * self.springs.w.value;
-            let click_x = rel_x as f32 - page_shift;
+            let click_x = rel_x as f32 - self.page_translation(ExpandedPage::Music);
             self.seek.preview_at(click_x);
             window.request_redraw();
         } else if self.finish_seek() {
@@ -615,7 +645,7 @@ impl App {
         let progress_hover_active = if self.seek.active {
             true
         } else if self.expanded
-            && (self.springs.view.value as f64) < 0.5
+            && self.page_focused(ExpandedPage::Music)
             && self.media_control_available(
                 winisland_plugin_api::types::v2::context::MEDIA_CONTROL_SEEK,
             )
@@ -627,8 +657,7 @@ impl App {
                 music_active,
                 self.config.expanded_scale,
             ) {
-                let page_shift = self.springs.view.value * self.springs.w.value;
-                let cx = rel_x as f32 - page_shift;
+                let cx = rel_x as f32 - self.page_translation(ExpandedPage::Music);
                 let cy = rel_y as f32;
                 let margin = 4.0 * self.config.expanded_scale;
                 cx >= bar_left - margin
@@ -688,6 +717,12 @@ impl App {
             self.springs
                 .hide
                 .update_dt(hide_target, stiffness, damping, dt);
+            let hide_span = self.compute_island_layout().hide_distance.max(50.0) as f32;
+            self.springs.hide.settle(
+                hide_target,
+                SETTLE_PIXELS / hide_span,
+                SETTLE_PIXEL_VELOCITY / hide_span,
+            );
         }
         if !(self.is_hidden() || self.hide.fullscreen && self.hide.overlay_reveal) {
             self.restore_hide_origin(window);
@@ -700,7 +735,7 @@ impl App {
     }
 
     fn update_expand_collapse_click(&mut self, window: &WindowRef, is_hovering_visible: bool) {
-        if self.config.fullscreen_auto_hide && self.is_fullscreen_suppressed {
+        if self.fullscreen_hide_active() {
             return;
         }
         let pressing = self.input_pressed();
@@ -711,7 +746,7 @@ impl App {
         if self.expanded && !is_hovering_visible && pressing && !self.expanded_press_started_inside
         {
             self.expanded = false;
-            self.widget_view = false;
+            self.reset_page();
             window.request_redraw();
         }
         if !self.expanded && is_hovering_visible && pressing {
@@ -832,11 +867,7 @@ impl App {
         } else {
             (compact_widget_target_w, default_target_h, default_target_r)
         };
-        let target_view = if self.widget_view || !self.music_page_available {
-            1.0
-        } else {
-            0.0
-        };
+        let target_view = self.target_page_position();
         self.springs
             .retarget_expansion(self.expanded, target_w, target_h, target_r, target_view);
         let width_hiding = self.is_width_hiding();
@@ -857,10 +888,25 @@ impl App {
             }
         } else {
             self.springs.w.update_dt(target_w, 0.10, 0.68, dt);
+            self.springs
+                .w
+                .settle(target_w, SETTLE_PIXELS, SETTLE_PIXEL_VELOCITY);
         }
         self.springs.h.update_dt(target_h, 0.10, 0.68, dt);
+        self.springs
+            .h
+            .settle(target_h, SETTLE_PIXELS, SETTLE_PIXEL_VELOCITY);
         self.springs.r.update_dt(target_r, 0.10, 0.68, dt);
+        self.springs
+            .r
+            .settle(target_r, SETTLE_PIXELS, SETTLE_PIXEL_VELOCITY);
         self.springs.view.update_dt(target_view, 0.12, 0.68, dt);
+        let page_width = self.springs.w.value.max(1.0);
+        self.springs.view.settle(
+            target_view,
+            SETTLE_PIXELS / page_width,
+            SETTLE_PIXEL_VELOCITY / page_width,
+        );
         if was_animating && !self.springs.any_animating() {
             window.request_redraw();
         }
@@ -909,13 +955,13 @@ impl App {
         let playback_active = !self.is_hidden()
             && compact_components_visible
             && pacing.media_is_playing
-            && (!self.expanded || self.springs.view.value < 1.0);
+            && (!self.expanded || self.page_visible(ExpandedPage::Music));
         let dynamic_effect_active = !self.is_hidden()
             && compact_components_visible
             && self.config.island_style == "dynamic"
             && self.current_media_info().thumbnail.is_some();
         let interactive_active = (pacing.is_hovering_visible
-            && (!self.expanded || (self.music_page_available && self.springs.view.value < 1.0)))
+            && (!self.expanded || self.page_visible(ExpandedPage::Music)))
             || pacing.compact_overlay_visible
             || pacing.passive_reveal_active
             || self.right_press_cursor.is_some();
@@ -973,7 +1019,7 @@ impl App {
             return false;
         }
         let visible = if self.expanded {
-            (!self.music_page_available || self.springs.view.value > 0.0)
+            self.page_visible(ExpandedPage::Widgets)
                 && self
                     .config
                     .widget_layout

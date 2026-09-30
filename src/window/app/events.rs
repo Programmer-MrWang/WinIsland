@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
 use winisland_platform::{
-    AppHandler, HostBackdropParams, InputState, MouseButton, PlatformEvent, Theme, TouchPhase,
-    WindowId, WindowPosition,
+    AppHandler, BackdropShape, HostBackdropParams, InputState, MouseButton, PlatformEvent, Theme,
+    TouchPhase, WindowId, WindowPosition,
 };
 
 use crate::platform::window;
@@ -94,6 +94,12 @@ impl App {
                 {
                     log::info!("File dropped: {}", path.display());
                     self.install_zip_drop(&path);
+                }
+                PlatformEvent::MouseWheel { delta, .. } => {
+                    let (px, py) = get_global_cursor_pos();
+                    if self.handle_mouse_wheel(delta, px, py) {
+                        win.request_redraw();
+                    }
                 }
                 PlatformEvent::MouseInput { state, button, .. } => {
                     if self.touch_id.is_some()
@@ -256,6 +262,7 @@ impl App {
                             None
                         };
                         let media_info = seeking_media_info.as_ref().unwrap_or(media_info);
+                        let expanded_pages = self.expanded_pages();
                         self.update_v2_album_art(
                             media_info.thumbnail.as_deref(),
                             media_info.thumbnail_hash,
@@ -292,8 +299,7 @@ impl App {
                         } else {
                             self.ctx_mgr.current_mini()
                         };
-                        let attention_alpha = if self.config.fullscreen_auto_hide
-                            && self.is_fullscreen_suppressed
+                        let attention_alpha = if self.fullscreen_hide_active()
                             && self.hide.fullscreen
                             && !self.hide.overlay_reveal
                         {
@@ -318,15 +324,45 @@ impl App {
                                 ("", "")
                             };
 
+                        let pager_alpha = crate::ui::island::expanded_content_alpha(
+                            progress,
+                            self.springs.hide.value * island_layout.content_hide_ratio,
+                            self.compact_overlay.is_visible(),
+                        );
+                        let pager_backdrop = if pager_alpha > 0.01 {
+                            let pager = crate::ui::expanded::pager::visible_layout(
+                                winisland_render::Rect::from_xywh(
+                                    island_layout.current_island_x as f32,
+                                    island_layout.current_island_y as f32,
+                                    self.springs.w.value,
+                                    self.springs.h.value,
+                                ),
+                                expanded_pages.len(),
+                                self.config.expanded_scale,
+                                island_layout.dock_bottom,
+                                pager_alpha,
+                                self.close_hover.value,
+                            );
+                            let shape = |rect: winisland_render::Rect| BackdropShape {
+                                screen_x: self.geom.win_x as f32 + rect.left,
+                                screen_y: self.geom.win_y as f32 + rect.top,
+                                width: rect.width(),
+                                height: rect.height(),
+                                radius: rect.height() / 2.0,
+                                opacity: pager_alpha,
+                            };
+                            [pager.bar.map(shape), Some(shape(pager.close))]
+                        } else {
+                            [None, None]
+                        };
                         let host_backdrop = super::system::update_host_backdrop(
                             &mut self.host_backdrop,
                             win.id(),
                             HostBackdropParams {
-                                enabled: !compact_components_hidden
-                                    && matches!(
-                                        self.config.island_style.as_str(),
-                                        "glass" | "dynamic"
-                                    ),
+                                enabled: matches!(
+                                    self.config.island_style.as_str(),
+                                    "glass" | "dynamic"
+                                ),
                                 screen_x: self.geom.win_x as f32
                                     + island_layout.current_island_x as f32,
                                 screen_y: self.geom.win_y as f32
@@ -334,6 +370,7 @@ impl App {
                                 width: self.springs.w.value,
                                 height: self.springs.h.value,
                                 radius: self.springs.r.value,
+                                extras: pager_backdrop,
                             },
                         );
                         let main_target = renderer.main_target();
@@ -344,6 +381,8 @@ impl App {
                                     painter,
                                     crate::ui::island::DrawIslandParams {
                                         layout: crate::ui::island::LayoutParams {
+                                            pager_above: island_layout.dock_bottom,
+                                            pager_close_hover: self.close_hover.value,
                                             current_w: self.springs.w.value,
                                             current_h: self.springs.h.value,
                                             current_r: self.springs.r.value,
@@ -417,6 +456,7 @@ impl App {
                                             } else {
                                                 &self.config.compact_widget_layout
                                             },
+                                            pages: &expanded_pages,
                                         },
                                         mini_content,
                                         compact_overlay: &self.compact_overlay,

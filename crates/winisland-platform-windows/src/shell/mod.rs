@@ -1,6 +1,7 @@
 mod activate;
 mod autostart;
 mod cjk;
+mod hotkey;
 mod instance;
 mod links;
 mod locale;
@@ -17,7 +18,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::HSTRING;
 use winisland_platform::{
-    InstanceLock, LocalDateTime, PlatformError, ShellIntegration, TrayAction, TrayLabels, TrayTheme,
+    Hotkey, InstanceLock, LocalDateTime, PlatformError, ShellIntegration, TrayAction, TrayLabels,
+    TrayTheme,
 };
 
 pub struct WindowsShell;
@@ -102,6 +104,12 @@ impl ShellIntegration for WindowsShell {
     }
     fn poll_tray_events(&self) -> Vec<TrayAction> {
         tray::poll_events()
+    }
+    fn register_hotkey(&self, hotkey: Hotkey) -> Result<(), PlatformError> {
+        hotkey::register(hotkey)
+    }
+    fn poll_hotkey_presses(&self) -> u32 {
+        hotkey::poll_presses()
     }
     fn activate_app(&self, app_user_model_id: &str) -> Result<bool, PlatformError> {
         activate::application(app_user_model_id)

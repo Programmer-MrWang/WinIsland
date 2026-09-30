@@ -26,6 +26,13 @@ impl Spring {
         }
     }
 
+    pub fn settle(&mut self, target: f32, value_epsilon: f32, velocity_epsilon: f32) {
+        if (target - self.value).abs() <= value_epsilon && self.velocity.abs() <= velocity_epsilon {
+            self.value = target;
+            self.velocity = 0.0;
+        }
+    }
+
     pub fn redirect_velocity_towards(&mut self, target: f32) {
         const MOMENTUM_RETENTION: f32 = 0.35;
         const MAX_DISTANCE_RATIO: f32 = 0.2;

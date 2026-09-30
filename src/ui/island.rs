@@ -17,6 +17,7 @@ use self::mini::{MiniContentParams, draw_mini_content};
 use crate::core::smtc::MediaInfo;
 use crate::ui::compact::CompactOverlay;
 use crate::ui::expanded::music_view::{default_media_palette, get_media_palette};
+use crate::ui::expanded::pager::{self, ExpandedPage, PagerParams};
 use winisland_core::config::{
     CompactWidgetSlot, LyricTransitionAnimation, PluginWidgetSlot, WidgetSlot,
 };
@@ -27,6 +28,8 @@ use winisland_render::DrawingContext;
 use winisland_render::{BlurSpec, Image, Painter, Path, Point, RasterSurface, Rect, Rgba, Vec2};
 
 pub struct LayoutParams {
+    pub pager_above: bool,
+    pub pager_close_hover: f32,
     pub current_w: f32,
     pub current_h: f32,
     pub current_r: f32,
@@ -76,6 +79,7 @@ pub struct StyleParams<'a> {
     pub plugin_frames: &'a HashMap<u64, PreparedFrame>,
     pub plugin_host: Option<&'a PluginHost>,
     pub compact_widget_layout: &'a [CompactWidgetSlot],
+    pub pages: &'a [ExpandedPage],
 }
 
 use winisland_core::context::MiniContent;
@@ -109,6 +113,18 @@ pub struct DrawIslandParams<'a> {
     pub attention_alpha: f32,
 }
 
+pub fn expanded_content_alpha(
+    expansion_progress: f32,
+    hide_progress: f32,
+    compact_overlay_visible: bool,
+) -> f32 {
+    if compact_overlay_visible {
+        0.0
+    } else {
+        expansion_progress.powi(2).clamp(0.0, 1.0) * (1.0 - hide_progress)
+    }
+}
+
 pub fn draw_island(
     drawing_context: &mut DrawingContext<'_>,
     painter: Painter<'_>,
@@ -136,11 +152,11 @@ pub fn draw_island(
     painter.clip_path(&island_path);
 
     let compact_overlay_visible = params.compact_overlay.is_visible();
-    let expanded_alpha = if compact_overlay_visible {
-        0.0
-    } else {
-        layout.expansion_progress.powi(2).clamp(0.0, 1.0) * (1.0 - layout.hide_progress)
-    };
+    let expanded_alpha = expanded_content_alpha(
+        layout.expansion_progress,
+        layout.hide_progress,
+        compact_overlay_visible,
+    );
     let mini_alpha = if compact_overlay_visible {
         0.0
     } else {
@@ -180,6 +196,7 @@ pub fn draw_island(
     }
     painter.restore();
     draw_island_border(painter, &params);
+    draw_pager(painter, drawing_context, &params, rect, expanded_alpha);
     if params.attention_alpha > 0.0 {
         let layout = &params.layout;
         let inset = -2.0 * layout.compact_scale;
@@ -317,6 +334,7 @@ fn draw_expanded_layer(
         painter,
         blur_filter,
         expanded_alpha: alpha,
+        pages: style.pages,
         view_offset: layout.view_offset,
         current_w: layout.current_w,
         offset_x: layout.island_x,
@@ -409,6 +427,39 @@ fn draw_compact_layer(
         (alpha * layout.compact_widget_opacity * f32::from(u8::MAX)) as u8,
         has_mini_content,
     );
+}
+
+fn draw_pager(
+    painter: Painter<'_>,
+    drawing_context: &mut DrawingContext<'_>,
+    params: &DrawIslandParams<'_>,
+    rect: Rect,
+    alpha: f32,
+) {
+    let pages = params.style.pages;
+    if alpha <= MIN_VISIBLE_OPACITY {
+        return;
+    }
+    let backdrop = (params.style.island_style == "dynamic")
+        .then(|| {
+            crate::utils::backdrop::get_blurred_cover_background(
+                drawing_context,
+                params.media.media,
+            )
+        })
+        .flatten();
+    pager::draw(PagerParams {
+        painter,
+        island: rect,
+        count: pages.len(),
+        position: params.layout.view_offset,
+        scale: params.layout.expanded_scale,
+        above: params.layout.pager_above,
+        alpha,
+        close_hover: params.layout.pager_close_hover,
+        host_blur: params.style.host_backdrop,
+        backdrop: backdrop.as_ref(),
+    });
 }
 
 fn draw_island_border(painter: Painter<'_>, params: &DrawIslandParams<'_>) {

@@ -13,7 +13,6 @@ pub use visualizer::{DrawVisualizerParams, draw_visualizer};
 use self::controls::ease_out_back;
 use self::palette::get_palette_from_image;
 use crate::core::smtc::MediaInfo;
-use crate::icons::arrows::draw_arrow_right;
 use crate::icons::controls::{draw_control_triangle, draw_pause_button, draw_play_button};
 use crate::utils::cover::decode_cover_image;
 use crate::utils::scroll::{ScrollDrawParams, ScrollText};
@@ -29,8 +28,6 @@ use std::sync::{Arc, OnceLock};
 use winisland_core::physics::Spring;
 
 const CONTENT_PADDING: f32 = 24.0;
-const PAGE_ARROW_RIGHT_INSET: f32 = 7.5;
-const PAGE_ARROW_FADE_RATE: f32 = 5.0;
 const COVER_SIZE: f32 = 64.0;
 const TRACK_TEXT_GAP: f32 = 18.0;
 const TRACK_TEXT_RIGHT_INSET: f32 = 70.0;
@@ -193,12 +190,10 @@ pub struct DrawMusicPageParams<'a> {
     pub ox: f32,
     pub oy: f32,
     pub w: f32,
-    pub h: f32,
     pub alpha: u8,
     pub media: &'a MediaInfo,
     pub music_active: bool,
     pub available_controls: u32,
-    pub view_offset: f32,
     pub scale: f32,
     pub expansion_progress: f32,
     pub viz_h_scale: f32,
@@ -216,12 +211,10 @@ pub fn draw_music_page(params: DrawMusicPageParams<'_>) {
         ox,
         oy,
         w,
-        h,
         alpha,
         media,
         music_active,
         available_controls,
-        view_offset,
         scale,
         expansion_progress,
         viz_h_scale,
@@ -233,18 +226,6 @@ pub fn draw_music_page(params: DrawMusicPageParams<'_>) {
         palette,
     } = params;
 
-    let arrow_alpha =
-        (alpha as f32 * (1.0 - view_offset * PAGE_ARROW_FADE_RATE).clamp(0.0, 1.0)) as u8;
-    if arrow_alpha > 0 {
-        draw_arrow_right(
-            painter,
-            ox + w - PAGE_ARROW_RIGHT_INSET * scale,
-            oy + h / 2.0,
-            arrow_alpha,
-            scale,
-            text_color,
-        );
-    }
     let base_img_size = COVER_SIZE * scale;
     let (img_size, img_x, img_y) = (
         base_img_size,

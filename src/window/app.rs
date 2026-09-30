@@ -4,6 +4,7 @@ use crate::core::smtc::{MediaInfo, SmtcListener};
 use crate::platform::WindowRef;
 use crate::plugin::inventory::PluginManager;
 use crate::ui::compact::CompactOverlay;
+use crate::ui::expanded::pager::ExpandedPage;
 use crate::window::settings::SettingsApp;
 use pollkit::{Cooldown, Every, Job};
 use std::cell::Cell;
@@ -27,6 +28,7 @@ mod events;
 mod frame;
 mod input;
 mod layout;
+mod pages;
 mod startup;
 mod system;
 mod v2;
@@ -38,10 +40,13 @@ const RIGHT_DRAG_THRESHOLD: i32 = 4;
 const DOUBLE_CLICK_DISTANCE: f32 = 8.0;
 pub(super) const DEFAULT_ANIMATION_REFRESH_RATE_MILLIHERTZ: u32 = 144_000;
 pub(super) const DEFAULT_ANIMATION_FRAME_INTERVAL: Duration = Duration::from_micros(6_944);
-
-fn should_show_widget_view(music_page_available: bool) -> bool {
-    !music_page_available
-}
+const HIDE_HOTKEY: winisland_platform::Hotkey = winisland_platform::Hotkey {
+    ctrl: true,
+    alt: true,
+    shift: false,
+    win: false,
+    key: 'H',
+};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DragAxis {
@@ -69,8 +74,12 @@ pub struct App {
     expanded_press_started_inside: bool,
     expanded_header_press: Option<(i32, i32)>,
     components_hidden: bool,
-    widget_view: bool,
+    current_page: ExpandedPage,
     music_page_available: bool,
+    wheel_accumulator: f32,
+    last_wheel_page_at: Option<Instant>,
+    fullscreen_hide_paused: bool,
+    close_hover: Spring,
     visible: bool,
     springs: IslandSprings,
     geom: WindowGeometry,
@@ -178,8 +187,12 @@ impl Default for App {
             expanded_press_started_inside: false,
             expanded_header_press: None,
             components_hidden: false,
-            widget_view: false,
+            current_page: ExpandedPage::Music,
             music_page_available: false,
+            wheel_accumulator: 0.0,
+            last_wheel_page_at: None,
+            fullscreen_hide_paused: false,
+            close_hover: Spring::new(0.0),
             visible: true,
             springs: IslandSprings::new(&config),
             geom: WindowGeometry::default(),
@@ -506,6 +519,7 @@ impl IslandSprings {
 
 struct IslandLayout {
     offset_x: f64,
+    dock_bottom: bool,
     island_y: f64,
     current_island_x: f64,
     current_island_y: f64,
@@ -633,8 +647,14 @@ impl App {
         self.is_hidden() || (self.is_dragging && self.hide.origin.is_some())
     }
 
+    fn fullscreen_hide_active(&self) -> bool {
+        self.config.fullscreen_auto_hide
+            && self.is_fullscreen_suppressed
+            && !self.fullscreen_hide_paused
+    }
+
     fn reveal_island(&mut self) {
-        if self.config.fullscreen_auto_hide && self.is_fullscreen_suppressed {
+        if self.fullscreen_hide_active() {
             return;
         }
         self.hide.auto = false;
