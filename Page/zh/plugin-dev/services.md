@@ -1,6 +1,6 @@
 # 宿主服务
 
-ABI v2 通过 `PluginHostV2.query` 提供十一张带版本号的服务表。SDK 的 `Host` 封装常见操作；`winisland_plugin_api::abi` 中的原始服务表提供全部函数。每张表都以 `TablePrefix` 开头，当前表版本为 `IFACE_VERSION_1`。调用前检查所需函数槽。除日志服务外，需在 `PluginDescriptorV2` 声明对应 `CAP_*` 能力。
+ABI v2 通过 `PluginHostV2.query` 提供十一张带版本号的服务表。本页为概览；[API 参考](/plugin-dev/api)逐页列出各服务表的方法和数据约定。SDK 的 `Host` 封装常见操作；`winisland_plugin_api::abi` 中的原始服务表提供全部函数。每张表都以 `TablePrefix` 开头，当前表版本为 `IFACE_VERSION_1`。调用前检查所需函数槽。除日志服务外，需在 `PluginDescriptorV2` 声明对应 `CAP_*` 能力。
 
 | 能力 | 原始服务表 | SDK 入口 | 主要操作 |
 |---|---|---|---|

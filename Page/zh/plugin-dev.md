@@ -11,6 +11,7 @@ WinIsland 使用 ABI v2 加载受信任的 Windows 原生 DLL。当前 `winislan
 | [快速开始](/plugin-dev/quickstart) | 构建、加载并打包 ABI v2 插件 |
 | [ABI 与生命周期](/plugin-dev/abi-lifecycle) | 描述符校验、所有权、回调、卸载和迁移 |
 | [宿主服务](/plugin-dev/services) | 十一张服务表、绘制、设置与限制 |
+| [API 参考](/plugin-dev/api) | 每张公开服务表单独一页，列出方法、数据约定和限制 |
 | [打包与安装](/plugin-dev/packaging) | `plugin.yml`、ZIP、签名、安装和更新 |
 | [API 更新日志](/api-changelog) | 已发布库版本的历史记录 |
 

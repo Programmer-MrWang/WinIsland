@@ -11,6 +11,7 @@ WinIsland loads trusted Windows DLLs using ABI v2. The current `winisland-plugin
 | [Quickstart](/plugin-dev/quickstart) | Build, load, and package an ABI v2 plugin |
 | [ABI and lifecycle](/plugin-dev/abi-lifecycle) | Descriptor validation, ownership, callbacks, shutdown, and migration |
 | [Host services](/plugin-dev/services) | All eleven service tables, drawing, settings, and limits |
+| [API reference](/plugin-dev/api) | One page per public service table, with methods, data contracts, and limits |
 | [Packaging and installation](/plugin-dev/packaging) | `plugin.yml`, ZIPs, signing, installation, and updates |
 | [API changelog](/api-changelog) | Historical published crate release notes |
 
