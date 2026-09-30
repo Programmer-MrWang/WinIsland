@@ -2,6 +2,17 @@
 
 `LyricsTransformApiV2` 注册显示前处理已解析歌词的回调。声明 `CAP_LYRICS` 并查询 `IFACE_LYRICS_TRANSFORM`。SDK `host.lyrics()?.register(|line| ...)` 会管理文字转换闭包的回调存储。
 
+## 一个常见用法
+
+在 `create` 中注册一次转换器，把返回的 `Resource` 存在实例里，`shutdown` 时释放。例如把已知拼写替换成另一种写法：
+
+```rust
+let transform = host.lyrics()?.register(|line| line.replace("colour", "Colour"))?;
+// 把 transform 保存在插件实例中。
+```
+
+这个例子保留了 Unicode 字符数，对逐词同步歌词很重要。SDK 闭包只收到文字，因此最好让所有行的替换都保持字符数不变。若需要区别处理逐词同步行，可用原始回调读取 `LYRICS_TEXT_FLAG_WORD_SYNCED`。
+
 ## 方法
 
 两种方法都先接收 `context, token`，并返回 `PluginStatus`。

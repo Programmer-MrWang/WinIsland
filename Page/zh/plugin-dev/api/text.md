@@ -2,6 +2,17 @@
 
 `TextApiV2` 使用 WinIsland 的字体管理器测量文字，并读取宿主字体族名称。声明 `CAP_TEXT` 并查询 `IFACE_TEXT`。SDK `host.text()?.measure(text, size, family)` 使用 400 字重和正体；其他样式使用原始服务表。
 
+## 一个常见用法
+
+在[小组件](/plugin-dev/api/widget)中画歌曲标题前，按准备使用的字号和字体测量一次。返回的宽度可用来决定封面要留多少空间，或标题是否需要缩短。测量值使用宿主的逻辑绘制单位，可与小组件的 `logical_size()` 搭配。
+
+```rust
+let metrics = host.text()?.measure("正在播放", 14.0, "Segoe UI")?;
+let title_width = metrics.width;
+```
+
+这个 API 只负责测量，不会画文字或安装字体。生成绘制列表时应使用同样的文字样式，避免测量和实际显示不一致。
+
 ## 方法
 
 两种方法都先接收 `context, token`，并返回 `PluginStatus`。

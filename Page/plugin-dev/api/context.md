@@ -2,6 +2,17 @@
 
 `ContextApiV2` publishes an activity or alert as text that WinIsland can show in the compact island. Declare `CAP_CONTEXT` and query `IFACE_CONTEXT`. The SDK offers `host.context()?.create(title, body)` for a default medium-priority context; use the raw table for priority, timeout, or compact text.
 
+## A typical use
+
+For a running timer, create one context when the timer starts, update that same ID as the time changes, and release it when the timer ends. For a brief “Done” message, set `timeout_ms` through the raw table so it stops displaying after that time; still release its resource later. Keep the SDK `Resource` in your instance; dropping it removes the text.
+
+```rust
+let status = host.context()?.create("Timer", "Running")?;
+// Keep `status` in the plugin instance until the timer stops.
+```
+
+The SDK helper has no update method. Use the raw `update` function if the text changes; repeatedly calling `create` consumes additional context slots.
+
 ## Methods
 
 The parameters below follow the common `context, token` arguments. Each method returns `PluginStatus`.

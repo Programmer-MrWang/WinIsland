@@ -2,6 +2,25 @@
 
 `WidgetApiV2` 创建网格小组件并接收完整绘制列表。声明 `CAP_WIDGET` 并查询 `IFACE_WIDGET`。SDK 提供 `host.widgets()?.create(WidgetSpec::new("key").span(2, 1))`、`Widget` 句柄及 `DrawListBuilder`。
 
+## 一帧是怎么画出来的
+
+小组件创建一次即可，把 `Widget` 对象存在插件实例中。内容变化时先读 `logical_size()`，按这个尺寸画好**整帧**，再提交。只提交变化的文字不够，因为新列表会替换上一帧。稳定的 `key` 对应用户设置的布局位置，发布新版本时也应保持不变。
+
+```rust
+let (width, height) = widget.logical_size();
+if width > 0.0 && height > 0.0 {
+    let mut list = DrawListBuilder::new(Size::new(width, height));
+    list.fill_round_rect(
+        Rect::new(0.0, 0.0, width, height),
+        8.0,
+        Rgba::from_argb(0x8000_0000),
+    );
+    widget.submit(list.finish())?;
+}
+```
+
+此处假设 `widget` 是 SDK 的 `Widget`，并已导入 SDK 绘制类型。[完整示例](https://github.com/WinIslandProject/WinIsland/blob/master/crates/winisland-plugin-api/examples/minimal_widget.rs)还画了文字和封面。`request_redraw` 是请求重画已有帧；画面内容变了，要提交新列表。
+
 ## 方法
 
 所有方法先接收 `context, token`，并返回 `PluginStatus`。

@@ -2,6 +2,17 @@
 
 `ContextApiV2` 向灵动岛发布活动或提醒文字。声明 `CAP_CONTEXT` 并查询 `IFACE_CONTEXT`。SDK `host.context()?.create(title, body)` 创建默认中优先级状态；优先级、超时和紧凑文字需要使用原始服务表。
 
+## 一个常见用法
+
+做计时器时，开始时创建一条状态，时间变化时更新同一个 ID，结束时释放。做短暂的“完成”提醒时，可通过原始服务表设置 `timeout_ms`，到时停止显示；资源之后仍需释放。SDK 返回的 `Resource` 要存在插件实例里；丢弃它就会移除文字。
+
+```rust
+let status = host.context()?.create("计时器", "运行中")?;
+// 把 status 保存在插件实例中，直到计时结束。
+```
+
+SDK 便捷方法没有更新接口。文字变化时用原始 `update`；反复 `create` 会占用更多状态名额。
+
 ## 方法
 
 下表参数均排在通用的 `context, token` 之后，所有方法返回 `PluginStatus`。

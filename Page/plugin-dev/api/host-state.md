@@ -2,6 +2,15 @@
 
 `HostStateApiV2` reads WinIsland's current media and theme snapshot or subscribes to changes. Declare `CAP_HOST_STATE` and query `IFACE_HOST_STATE`. The SDK provides `host.host_state()?.get()`; subscriptions use the raw table.
 
+## A typical use
+
+A widget that shows the current track can call `get()` to obtain the title and playing state, then build its draw list. If it should react whenever the state changes, use raw `subscribe` and retain the subscription ID and callback data. Read an initial snapshot with `get` as well; the subscription is for subsequent notifications. Release it before freeing callback data.
+
+```rust
+let state = host.host_state()?.get()?;
+// Use state.media_title and state.is_playing for the next drawing.
+```
+
 ## Methods
 
 Each method takes `context, token` first and returns `PluginStatus`.

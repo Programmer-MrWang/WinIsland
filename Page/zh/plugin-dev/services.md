@@ -2,6 +2,8 @@
 
 ABI v2 通过 `PluginHostV2.query` 提供十一张带版本号的服务表。本页为概览；[API 参考](/plugin-dev/api)逐页列出各服务表的方法和数据约定。SDK 的 `Host` 封装常见操作；`winisland_plugin_api::abi` 中的原始服务表提供全部函数。每张表都以 `TablePrefix` 开头，当前表版本为 `IFACE_VERSION_1`。调用前检查所需函数槽。除日志服务外，需在 `PluginDescriptorV2` 声明对应 `CAP_*` 能力。
 
+可以把服务理解为 WinIsland 的一个功能入口：能力位表示“我要用它”，查询服务表拿到函数，调用 `create` 或 `register` 后拿到自己负责释放的资源。内容还需要显示时，就保留 SDK 对象或原始 ID。
+
 | 能力 | 原始服务表 | SDK 入口 | 主要操作 |
 |---|---|---|---|
 | `CAP_CONTEXT` | `ContextApiV2` | `host.context()?` | 创建、更新、释放活动文字 |
@@ -20,7 +22,7 @@ ABI v2 通过 `PluginHostV2.query` 提供十一张带版本号的服务表。本
 
 `ContextDataV2` 包含优先级、紧凑模式标记、超时、标题、正文和紧凑文字。超时为零时一直保留到释放。刷新时应更新现有资源，不要反复新建。SDK `host.context()?.create(title, body)` 返回持有资源的 `Resource`。
 
-`MediaSourceDataV2` 包含标题、艺术家、专辑、毫秒单位的时长/进度、播放标记、可选 PNG/JPEG 封面字节、可用控制和命令回调。SDK `create_source(title, artist)` 创建仅显示的来源；封面、时间轴或控制要使用原始 `MediaApiV2`。释放或禁用插件媒体源后，WinIsland 会回退到其他来源或 SMTC。回调数据要保留到可以安全释放为止。
+“导出完成”这样的提醒或“计时中”这样的活动状态用 Context；插件自己提供当前曲目时用 Media。`MediaSourceDataV2` 包含标题、艺术家、专辑、毫秒单位的时长/进度、播放标记、可选 PNG/JPEG 封面字节、可用控制和命令回调。SDK `create_source(title, artist)` 只发布基础信息，不带控制按钮；封面、时间轴或控制要使用原始 `MediaApiV2`。释放或禁用插件媒体源后，WinIsland 会回退到其他来源或 SMTC。回调数据要保留到可以安全释放为止。
 
 ## 小组件绘制
 
@@ -43,6 +45,8 @@ ABI v2 通过 `PluginHostV2.query` 提供十一张带版本号的服务表。本
 `TextApiV2.measure` 使用带字号、字重、斜体标记和 UTF-8 字体族的 `TextStyleV2`；`font_family` 返回宿主字体族。SDK `measure` 便捷方法使用 400 字重和正体。`ImageApiV2` 可解码 PNG/JPEG/WebP、上传 RGBA 或获取当前封面；图片 ID 持有至释放。获取的封面句柄在曲目变化后仍保留旧图。
 
 `StoreApiV2` 在插件独立命名空间持久化字节；单个值最多 1 MiB。`LogApiV2.write` 使用数字级别，没有能力门槛。SDK `LogApi::write` 和 `Widget::request_redraw` 会忽略错误；需要状态时使用原始表。
+
+比如要做“显示秒数”开关：在 `create` 时从 Store 读出旧值，填入 Settings 页面；`on_change` 接受新值后再写入 Store。只重新创建设置页不会自动保存选择。要做歌曲小组件，则要把 Host State 或 Media 与 Text/Image、Widget 组合使用；Widget 自身不会提供歌曲内容。
 
 ## 资源限制与错误
 

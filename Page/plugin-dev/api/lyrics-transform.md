@@ -2,6 +2,17 @@
 
 `LyricsTransformApiV2` registers a callback that changes parsed lyric text before display. Declare `CAP_LYRICS` and query `IFACE_LYRICS_TRANSFORM`. The SDK `host.lyrics()?.register(|line| ...)` manages callback storage for a text-to-text closure.
 
+## A typical use
+
+Register one transformer during `create`, retain its `Resource`, and drop it during `shutdown`. For example, a plugin can replace a known spelling in displayed lines:
+
+```rust
+let transform = host.lyrics()?.register(|line| line.replace("colour", "Colour"))?;
+// Keep `transform` in the plugin instance.
+```
+
+This example preserves the number of Unicode characters, which matters for word-synchronised lyrics. The SDK closure receives only text, so use count-preserving changes for every line. The raw callback receives `LYRICS_TEXT_FLAG_WORD_SYNCED` if you need to treat synchronised lines differently.
+
 ## Methods
 
 Both methods take `context, token` first and return `PluginStatus`.

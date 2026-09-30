@@ -2,6 +2,17 @@
 
 `ImageApiV2` 为小组件绘制列表创建图片句柄。声明 `CAP_IMAGE` 并查询 `IFACE_IMAGE`。SDK 提供 `decode`、`upload_rgba`、`album_art`，以及在丢弃时释放 ID 的 `ImageHandle`。
 
+## 一个常见用法
+
+做音乐小组件时，曲目变化后调用 `album_art()`，保留返回的 `ImageHandle`，并在小组件的图片绘制命令里传入 `id()`。没有封面时会返回错误，这时可以画占位图。已提交的帧不再引用旧图片后，再释放旧句柄。
+
+```rust
+let cover = host.images()?.album_art().ok();
+// 已提交的小组件帧仍使用图片 ID 时，保留 cover。
+```
+
+自己的 PNG/JPEG/WebP 资源可调用一次 `decode(encoded_bytes)`，之后复用句柄。自行生成像素时，使用 `upload_rgba(width, height, rgba)`，每个像素恰好四字节。不要每次 tick 都解码同一张图：每个新句柄都占用图片名额。
+
 ## 方法
 
 所有方法先接收 `context, token`，并返回 `PluginStatus`。

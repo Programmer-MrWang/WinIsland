@@ -2,6 +2,16 @@
 
 ABI v2 is a native, in-process contract. Only C-compatible values, sized structures, opaque handles, and borrowed byte ranges cross the boundary. The host cannot make an invalid native pointer safe; the plugin must keep every pointer valid for its documented lifetime.
 
+In everyday terms: WinIsland loads your DLL, calls `create` once to start an instance, calls its registered callbacks while it runs, then asks `shutdown` to stop it and `destroy` to free it. The DLL must stay loaded until all plugin code and callbacks have finished.
+
+| Stage | Your job | Host behavior |
+|---|---|---|
+| Entry | Return a stable descriptor. | Checks metadata, ABI, capabilities, and callbacks. |
+| `create` | Validate input, create an instance, retain resources and callback data. | Gives the instance a token and service tables. |
+| Running | Update or submit content; handle callbacks. | Owns scheduling and validates resources and drawings. |
+| `shutdown` | Stop your threads and release resources; return `Ok` only when safe. | Stops using the instance and revokes remaining resources after success. |
+| `destroy` | Free the instance pointer once. | Unloads the DLL after cleanup. |
+
 ## Entry and descriptor
 
 Export `winisland_plugin_entry_v2` and return an immutable descriptor that remains live until the DLL unloads:
@@ -30,6 +40,8 @@ A successful `create` writes one non-null `PluginHandleV2` and returns `PluginSt
 `PluginToken`, `ResourceId`, `WidgetId`, and `ImageId` are opaque identities. Each resource belongs to the token that created it; stale, foreign, or wrong-kind handles are rejected. The host copies borrowed request data during synchronous service calls. The SDK's `Resource`, `Widget`, and `ImageHandle` wrappers release resources on drop. Drop them before `shutdown` returns; raw callers must release their IDs explicitly. The host revokes leftovers after successful shutdown.
 
 `PluginStatus` values include `Ok`, `InvalidArgument`, `StaleHandle`, `CapabilityMissing`, `LimitExceeded`, `UnsupportedVersion`, `IoError`, and `Internal`. A successful draw-list submission only confirms copying; validation and rendering occur later.
+
+If a service returns `StaleHandle`, first check whether the resource was already released or its ID belongs to a different plugin or resource kind. If it returns `CapabilityMissing`, check the descriptor bit. `LimitExceeded` can mean a quota, an output buffer that is too small, or an active callback that blocks release; the relevant [API page](/plugin-dev/api) gives the specific rule.
 
 ## Tick, callbacks, and shutdown
 

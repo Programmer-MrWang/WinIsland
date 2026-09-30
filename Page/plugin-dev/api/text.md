@@ -2,6 +2,17 @@
 
 `TextApiV2` measures text using WinIsland's font manager and reads host font-family names. Declare `CAP_TEXT` and query `IFACE_TEXT`. The SDK `host.text()?.measure(text, size, family)` uses weight 400 and upright style; use the raw table for other styles.
 
+## A typical use
+
+Before drawing a title in a [widget](/plugin-dev/api/widget), measure it at the same font size and family you plan to draw. Use the returned width to decide how much room to leave for album art or whether to shorten the title. Measurements are in the host's logical drawing units, so they pair with widget `logical_size()`.
+
+```rust
+let metrics = host.text()?.measure("Now playing", 14.0, "Segoe UI")?;
+let title_width = metrics.width;
+```
+
+This API measures text; it does not render or install a font. Use the measured style again in the draw list to keep layout consistent.
+
 ## Methods
 
 Both methods take `context, token` first and return `PluginStatus`.

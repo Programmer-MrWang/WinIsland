@@ -2,6 +2,8 @@
 
 ABI v2 exposes eleven versioned service tables through `PluginHostV2.query`. This page is a tour; the [API reference](/plugin-dev/api) documents each table's methods and data contract. The SDK `Host` wrapper covers common operations; the raw tables in `winisland_plugin_api::abi` expose every function. Each raw table starts with `TablePrefix` and currently uses `IFACE_VERSION_1`. Validate required function slots before calling them. Except for Log, declare the matching `CAP_*` bit in `PluginDescriptorV2`.
 
+Think of a service as an entry point into one part of WinIsland. A capability bit says your plugin needs it; querying the table gives you its functions; calling `create` or `register` gives you an owned resource. Keep the returned SDK object or raw ID for as long as the content should exist.
+
 | Capability | Raw table | SDK access | Main operations |
 |---|---|---|---|
 | `CAP_CONTEXT` | `ContextApiV2` | `host.context()?` | Create, update, release activity text |
@@ -20,7 +22,7 @@ ABI v2 exposes eleven versioned service tables through `PluginHostV2.query`. Thi
 
 `ContextDataV2` has a priority, compact flag, timeout, title, body, and compact text. Zero timeout keeps it until release. Update the same resource rather than creating a new one on each refresh. The SDK's `host.context()?.create(title, body)` returns an owned `Resource`.
 
-`MediaSourceDataV2` carries title, artist, album, duration/position in milliseconds, playing flag, optional PNG/JPEG cover bytes, declared controls, and an optional command callback. The SDK `create_source(title, artist)` publishes a display-only source; use `MediaApiV2` directly for cover, timeline, or controls. Releasing or disabling a plugin media source lets WinIsland fall back to another source or SMTC. Keep callback data valid until release is safe.
+Use Context for a short-lived message such as “Export complete” or a persistent activity such as “Timer running.” Use Media when the plugin itself supplies the active track. `MediaSourceDataV2` carries title, artist, album, duration/position in milliseconds, playing flag, optional PNG/JPEG cover bytes, declared controls, and an optional command callback. The SDK `create_source(title, artist)` publishes metadata without controls; use `MediaApiV2` directly for cover, timeline, or controls. Releasing or disabling a plugin media source lets WinIsland fall back to another source or SMTC. Keep callback data valid until release is safe.
 
 ## Widget drawing
 
@@ -43,6 +45,8 @@ A lyric transformer runs after lyrics are parsed. It uses a size query and then 
 `TextApiV2.measure` accepts `TextStyleV2` with size, weight, italic flag, and UTF-8 font family; `font_family` reports host families. The SDK `measure` convenience call uses weight 400 and upright style. `ImageApiV2` can decode PNG/JPEG/WebP, upload RGBA pixels, or capture current album art; image IDs remain owned until release. A captured album-art handle keeps its image after the cover changes.
 
 `StoreApiV2` stores bytes under plugin-local keys across restarts; a value is limited to 1 MiB. `LogApiV2.write` uses a numeric level and has no capability gate. SDK `LogApi::write` and `Widget::request_redraw` discard errors; use raw tables if the status matters.
+
+For a setting such as “show seconds,” read its Store value during `create`, put that value into the Settings page, and update Store after `on_change` accepts a new choice. Recreating the page alone does not persist the choice. For a widget that shows the song title, combine Host State or Media with Text/Image and Widget; Widget does not supply content on its own.
 
 ## Resource limits and errors
 

@@ -2,6 +2,17 @@
 
 `ImageApiV2` creates image handles for widget draw lists. Declare `CAP_IMAGE` and query `IFACE_IMAGE`. The SDK exposes `decode`, `upload_rgba`, `album_art`, and an `ImageHandle` that releases its ID on drop.
 
+## A typical use
+
+For a music widget, ask for `album_art()` when the track changes, retain the returned `ImageHandle`, and pass its `id()` to the widget's image drawing command. If no cover is available, `album_art()` returns an error; draw a placeholder instead. Release the old handle when it is no longer referenced by a submitted frame.
+
+```rust
+let cover = host.images()?.album_art().ok();
+// Keep `cover` while submitted widget frames still use its image ID.
+```
+
+For your own PNG/JPEG/WebP asset, call `decode(encoded_bytes)` once and reuse its handle. For generated pixels, call `upload_rgba(width, height, rgba)` with exactly four bytes per pixel. Avoid decoding the same image on every tick: each new handle counts against the image quota.
+
 ## Methods
 
 Each method takes `context, token` first and returns `PluginStatus`.

@@ -1,6 +1,17 @@
 # Media API
 
-`MediaApiV2` publishes a display-only now-playing source. Declare `CAP_MEDIA` and query `IFACE_MEDIA`. The SDK `host.media()?.create_source(title, artist)` creates a basic source; use the raw table for timeline, cover bytes, playback state, and control callbacks.
+`MediaApiV2` lets a plugin supply its own now-playing source. Declare `CAP_MEDIA` and query `IFACE_MEDIA`. The SDK `host.media()?.create_source(title, artist)` creates a basic source without controls; use the raw table for timeline, cover bytes, playback state, and control callbacks.
+
+## A typical use
+
+For an internet radio plugin, publish the station and current track with `create`, then call `update` when the track or playback position changes. If you advertise a play/pause or seek button, provide `on_command` and handle that action in your player. The host shows the button; it does not operate your player for you. Release the source when the stream stops or the plugin shuts down.
+
+The SDK shortcut is enough for static title and artist text:
+
+```rust
+let source = host.media()?.create_source("Sample track", "Sample artist")?;
+// Keep `source` alive while this track should be available.
+```
 
 ## Methods
 

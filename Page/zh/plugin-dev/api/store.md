@@ -2,6 +2,18 @@
 
 `StoreApiV2` 在 WinIsland 重启后仍保留插件独立的字节数据。声明 `CAP_STORE` 并查询 `IFACE_STORE`。SDK 提供 `host.store()?.get(key)`、`set(key, bytes)` 和 `delete(key)`。
 
+## 一个常见用法
+
+要记住一项设置，就在 `create` 时读取；键不存在时使用默认值；用户修改后再写入。Store 保存的是字节，不知道这些字节表示文字、JSON 还是布尔值。插件需自己选定编码方式，并一直使用同一套规则。
+
+```rust
+let store = host.store()?;
+let show_seconds = store.get("show-seconds")?.as_deref() == Some(&b"true"[..]);
+store.set("show-seconds", b"true")?;
+```
+
+`None` 表示从未保存；`Some(Vec::new())` 表示键存在，只是值为空。删除键会回到“不存在”的状态。通过这个 API，每个插件只访问自己的键空间。
+
 ## 方法
 
 所有方法先接收 `context, token`，并返回 `PluginStatus`。

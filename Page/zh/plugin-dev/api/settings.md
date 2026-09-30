@@ -2,6 +2,17 @@
 
 `SettingsApiV2` 向 WinIsland 添加一页声明式插件设置。声明 `CAP_SETTINGS` 并查询 `IFACE_SETTINGS`。SDK 辅助方法可创建简单章节或标签页；交互设置项需要原始服务表。
 
+## 一个常见用法
+
+先做一页只读内容，确认插件设置页能够出现：
+
+```rust
+let page = host.settings()?.create_label_page("sample", "示例设置", "插件已就绪")?;
+// 把 page 保存在插件实例中。
+```
+
+要做可操作的开关，先从 [Store](/plugin-dev/api/store) 读取旧值，把它填入页面数据，再用原始 `SettingsApiV2` 创建页面。`on_change` 收到新值时，先校验，再写入 Store；接受后才返回 `Ok`。Settings 不会自动保存用户选择。页面键和设置项键应保持稳定，才能在重启后恢复对应值。
+
 ## 方法
 
 所有方法先接收 `context, token`，并返回 `PluginStatus`。

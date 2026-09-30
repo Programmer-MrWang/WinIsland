@@ -2,6 +2,17 @@
 
 `SettingsApiV2` contributes one declarative settings page to WinIsland. Declare `CAP_SETTINGS` and query `IFACE_SETTINGS`. SDK helpers can create a simple section or label page; interactive items require the raw table.
 
+## A typical use
+
+Start with a read-only page to confirm the plugin appears in Settings:
+
+```rust
+let page = host.settings()?.create_label_page("sample", "Sample settings", "Plugin is ready")?;
+// Keep `page` in the plugin instance.
+```
+
+For an interactive switch, read its saved value from [Store](/plugin-dev/api/store), put that value in the page data, and create the page with raw `SettingsApiV2`. When `on_change` receives a new value, validate it, save it to Store, and return `Ok` only if you accept it. Settings does not save values automatically. Keep the page key and item keys stable so existing choices can be restored after restart.
+
 ## Methods
 
 Each method takes `context, token` first and returns `PluginStatus`.

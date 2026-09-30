@@ -2,6 +2,18 @@
 
 `StoreApiV2` keeps plugin-scoped byte values across WinIsland restarts. Declare `CAP_STORE` and query `IFACE_STORE`. The SDK provides `host.store()?.get(key)`, `set(key, bytes)`, and `delete(key)`.
 
+## A typical use
+
+To remember a setting, read it during `create`, use a default when the key is absent, then write the new value after the user changes it. Store accepts bytes; it does not know whether they represent text, JSON, or a boolean. Pick an encoding and use it consistently.
+
+```rust
+let store = host.store()?;
+let show_seconds = store.get("show-seconds")?.as_deref() == Some(&b"true"[..]);
+store.set("show-seconds", b"true")?;
+```
+
+`None` means no value was saved. `Some(Vec::new())` means a value exists but is empty. Deleting a key resets it to the absent state. Each plugin has its own key space through this API.
+
 ## Methods
 
 Each method takes `context, token` first and returns `PluginStatus`.
