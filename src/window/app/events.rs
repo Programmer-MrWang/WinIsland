@@ -341,6 +341,7 @@ impl App {
                                 self.config.expanded_scale,
                                 island_layout.dock_bottom,
                                 pager_alpha,
+                                self.bar_hover.value,
                                 self.close_hover.value,
                             );
                             let shape = |rect: winisland_render::Rect| BackdropShape {
@@ -382,6 +383,7 @@ impl App {
                                     crate::ui::island::DrawIslandParams {
                                         layout: crate::ui::island::LayoutParams {
                                             pager_above: island_layout.dock_bottom,
+                                            pager_bar_hover: self.bar_hover.value,
                                             pager_close_hover: self.close_hover.value,
                                             current_w: self.springs.w.value,
                                             current_h: self.springs.h.value,

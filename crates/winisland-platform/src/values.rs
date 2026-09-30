@@ -258,6 +258,13 @@ pub enum TrayTheme {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LunarDate {
+    pub month: u8,
+    pub day: u8,
+    pub leap: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Hotkey {
     pub ctrl: bool,
     pub alt: bool,

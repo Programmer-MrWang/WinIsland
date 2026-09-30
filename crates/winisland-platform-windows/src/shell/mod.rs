@@ -5,6 +5,7 @@ mod hotkey;
 mod instance;
 mod links;
 mod locale;
+mod lunar;
 mod paths;
 mod tray;
 mod update;
@@ -18,8 +19,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::HSTRING;
 use winisland_platform::{
-    Hotkey, InstanceLock, LocalDateTime, PlatformError, ShellIntegration, TrayAction, TrayLabels,
-    TrayTheme,
+    Hotkey, InstanceLock, LocalDateTime, LunarDate, PlatformError, ShellIntegration, TrayAction,
+    TrayLabels, TrayTheme,
 };
 
 pub struct WindowsShell;
@@ -50,6 +51,9 @@ impl ShellIntegration for WindowsShell {
             second: time.wSecond,
             millisecond: time.wMilliseconds,
         }
+    }
+    fn lunar_date(&self, year: u16, month: u16, day: u16) -> Option<LunarDate> {
+        lunar::convert(year, month, day)
     }
     fn to_simplified(&self, text: &str) -> String {
         cjk::to_simplified(text)

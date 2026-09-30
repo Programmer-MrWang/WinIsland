@@ -49,6 +49,7 @@ impl App {
     }
 
     pub(super) fn reset_page(&mut self) {
+        crate::ui::expanded::calendar_view::reset_to_today();
         self.current_page = self
             .expanded_pages()
             .first()
@@ -157,7 +158,7 @@ impl App {
         true
     }
 
-    pub(super) fn update_close_hover(
+    pub(super) fn update_pager_hover(
         &mut self,
         window: &crate::platform::WindowRef,
         rel_x: i32,
@@ -166,21 +167,51 @@ impl App {
         interaction_allowed: bool,
         dt: f32,
     ) {
-        let hovered = interaction_allowed
-            && self.expanded
-            && pager::hit_test(
-                self.island_rect(layout),
-                self.expanded_pages().len(),
-                self.springs.view.value,
-                self.config.expanded_scale,
-                layout.dock_bottom,
-                Point::new(rel_x as f32, rel_y as f32),
-            ) == Some(PagerHit::Close);
-        let target = if hovered { 1.0 } else { 0.0 };
-        let before = self.close_hover.value;
-        self.close_hover.update_dt(target, 0.22, 0.62, dt);
-        self.close_hover.settle(target, 0.002, 0.001);
-        if (self.close_hover.value - before).abs() > f32::EPSILON {
+        let hit = (interaction_allowed && self.expanded)
+            .then(|| {
+                pager::hit_test(
+                    self.island_rect(layout),
+                    self.expanded_pages().len(),
+                    self.springs.view.value,
+                    self.config.expanded_scale,
+                    layout.dock_bottom,
+                    Point::new(rel_x as f32, rel_y as f32),
+                )
+            })
+            .flatten();
+        let close_target = if hit == Some(PagerHit::Close) {
+            1.0
+        } else {
+            0.0
+        };
+        let bar_target = if matches!(hit, Some(PagerHit::Page(_))) {
+            1.0
+        } else {
+            0.0
+        };
+        let before = (self.close_hover.value, self.bar_hover.value);
+        for (spring, target) in [
+            (&mut self.close_hover, close_target),
+            (&mut self.bar_hover, bar_target),
+        ] {
+            spring.update_dt(target, 0.22, 0.62, dt);
+            spring.settle(target, 0.002, 0.001);
+        }
+        let calendar_hover =
+            (interaction_allowed && self.expanded && self.page_focused(ExpandedPage::Calendar))
+                .then(|| {
+                    crate::ui::expanded::calendar_view::hit_test(
+                        layout.offset_x as f32 + self.page_translation(ExpandedPage::Calendar),
+                        layout.island_y as f32,
+                        self.springs.w.value,
+                        self.springs.h.value,
+                        self.config.expanded_scale,
+                        Point::new(rel_x as f32, rel_y as f32),
+                    )
+                })
+                .flatten();
+        let calendar_changed = crate::ui::expanded::calendar_view::set_hover(calendar_hover);
+        if (self.close_hover.value, self.bar_hover.value) != before || calendar_changed {
             window.request_redraw();
         }
     }
