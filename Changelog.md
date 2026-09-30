@@ -6,6 +6,12 @@
 - Improved widget layout and plugin stability
 - Improved window responsiveness and software compatibility
 - Improved English and Chinese documentation and FAQs
+- Replaced the expanded side switch bars with a blurred page indicator below the island; click a dot or scroll to switch pages, and use the button beside it to close
+- Added a calendar page with holidays for the current language and month/year switching
+- Added the Ctrl+Alt+H shortcut to hide or show the island; during fullscreen auto-hide it temporarily keeps the island visible
+- Redesigned the resource usage editor, and improved the compact and ring layouts of resource usage
+- Inactivity auto-hide now only waits for widgets shown in compact mode
+- Fixed a black block after swiping to hide components in blur and cover color styles
 - Fixed known issues
 
 ### v1.3.9
