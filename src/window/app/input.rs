@@ -352,6 +352,23 @@ impl App {
                 }
             }
 
+            if self.page_focused(ExpandedPage::Calendar)
+                && let Some(action) = crate::ui::expanded::calendar_view::hit_test(
+                    offset_x as f32 + self.page_translation(ExpandedPage::Calendar),
+                    island_y as f32,
+                    w as f32,
+                    h as f32,
+                    self.config.expanded_scale,
+                    winisland_render::Point::new(rel_x as f32, rel_y as f32),
+                )
+            {
+                crate::ui::expanded::calendar_view::apply_action(action);
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+                return;
+            }
+
             if (rel_y as f64) < island_y + 40.0 * scale {
                 self.expanded_header_press =
                     Some((rel_x + self.geom.win_x, rel_y + self.geom.win_y));

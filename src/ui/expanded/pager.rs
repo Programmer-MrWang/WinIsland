@@ -22,6 +22,7 @@ pub const PAGER_EXTENT: f32 = GAP + CLOSE_SIZE + SHADOW_SIGMA * 3.0;
 pub enum ExpandedPage {
     Music,
     Widgets,
+    Calendar,
 }
 
 pub struct PageAvailability {
@@ -29,12 +30,12 @@ pub struct PageAvailability {
 }
 
 impl ExpandedPage {
-    pub const ALL: [Self; 2] = [Self::Music, Self::Widgets];
+    pub const ALL: [Self; 3] = [Self::Music, Self::Widgets, Self::Calendar];
 
     pub fn is_available(self, availability: &PageAvailability) -> bool {
         match self {
             Self::Music => availability.music,
-            Self::Widgets => true,
+            Self::Widgets | Self::Calendar => true,
         }
     }
 }
@@ -94,6 +95,7 @@ pub fn visible_layout(
     scale: f32,
     above: bool,
     alpha: f32,
+    bar_hover: f32,
     close_hover: f32,
 ) -> PagerLayout {
     let toward_island = if above { 1.0 } else { -1.0 };
@@ -103,8 +105,17 @@ pub fn visible_layout(
     );
     let resting = layout(island, count, scale, above);
     let close = resting.close.offset(offset);
+    let bar_height = close_display_size(scale, bar_hover);
     PagerLayout {
-        bar: resting.bar.map(|bar| bar.offset(offset)),
+        bar: resting.bar.map(|bar| {
+            let bar = bar.offset(offset);
+            Rect::from_xywh(
+                bar.left,
+                bar.center_y() - bar_height / 2.0,
+                bar.width(),
+                bar_height,
+            )
+        }),
         close: centered_square(
             Point::new(close.center_x(), close.center_y()),
             close_display_size(scale, close_hover),
@@ -172,6 +183,7 @@ pub struct PagerParams<'a> {
     pub scale: f32,
     pub above: bool,
     pub alpha: f32,
+    pub bar_hover: f32,
     pub close_hover: f32,
     pub host_blur: bool,
     pub backdrop: Option<&'a Image>,
@@ -186,6 +198,7 @@ pub fn draw(params: PagerParams<'_>) {
         scale,
         above,
         alpha,
+        bar_hover,
         close_hover,
         host_blur,
         backdrop,
@@ -195,7 +208,7 @@ pub fn draw(params: PagerParams<'_>) {
     }
     let alpha = alpha.clamp(0.0, 1.0);
     let close_hover = close_hover.clamp(0.0, 1.0);
-    let layout = visible_layout(island, count, scale, above, alpha, close_hover);
+    let layout = visible_layout(island, count, scale, above, alpha, bar_hover, close_hover);
     if let Some(bar) = layout.bar {
         draw_surface(painter, bar, scale, alpha, host_blur, backdrop);
         for (dot, weight) in dots(bar, count, position, scale) {

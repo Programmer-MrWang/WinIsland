@@ -1,4 +1,5 @@
 use crate::core::smtc::MediaInfo;
+use crate::ui::expanded::calendar_view::draw_calendar_page;
 use crate::ui::expanded::music_view::{DrawMusicPageParams, draw_music_page};
 use crate::ui::expanded::pager::ExpandedPage;
 use crate::ui::expanded::widget_view::draw_widget_page;
@@ -124,6 +125,16 @@ pub(super) fn draw_expanded_content(params: ExpandedContentParams<'_>) -> bool {
                         text_color,
                     );
                 }
+                ExpandedPage::Calendar => draw_calendar_page(
+                    painter,
+                    offset_x,
+                    offset_y,
+                    current_w,
+                    current_h,
+                    alpha,
+                    global_scale,
+                    text_color,
+                ),
             }
             painter.restore();
         }

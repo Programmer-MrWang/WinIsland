@@ -29,6 +29,7 @@ use winisland_render::{BlurSpec, Image, Painter, Path, Point, RasterSurface, Rec
 
 pub struct LayoutParams {
     pub pager_above: bool,
+    pub pager_bar_hover: f32,
     pub pager_close_hover: f32,
     pub current_w: f32,
     pub current_h: f32,
@@ -456,6 +457,7 @@ fn draw_pager(
         scale: params.layout.expanded_scale,
         above: params.layout.pager_above,
         alpha,
+        bar_hover: params.layout.pager_bar_hover,
         close_hover: params.layout.pager_close_hover,
         host_blur: params.style.host_backdrop,
         backdrop: backdrop.as_ref(),

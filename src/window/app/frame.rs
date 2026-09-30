@@ -198,7 +198,7 @@ impl App {
 
         self.update_seeking_input(&window, rel_x);
         self.update_progress_hover(rel_x, rel_y, offset_x, island_y, music_active);
-        self.update_close_hover(&window, rel_x, rel_y, &layout, !interaction_suppressed, dt);
+        self.update_pager_hover(&window, rel_x, rel_y, &layout, !interaction_suppressed, dt);
         self.update_hide_drag(&window, px, py, dt);
         self.update_expand_collapse_click(&window, is_hovering_visible);
 
@@ -949,7 +949,10 @@ impl App {
             || self.lyrics.transition < 1.0
             || self.is_dragging
             || self.seek.active
-            || self.is_right_dragging;
+            || self.is_right_dragging
+            || (self.expanded
+                && self.page_visible(ExpandedPage::Calendar)
+                && crate::ui::expanded::calendar_view::is_animating());
         let resource_usage_active = self.resource_usage_animating();
         let compact_components_visible = self.expanded || !self.components_hidden;
         let playback_active = !self.is_hidden()
