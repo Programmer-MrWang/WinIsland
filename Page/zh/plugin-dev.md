@@ -1,6 +1,6 @@
 # 插件开发
 
-WinIsland 使用 ABI v2 加载受信任的 Windows 原生 DLL。当前 `winisland-plugin-api` 库版本为 `0.8`。宿主会拒绝 ABI v1 安装包与入口。插件可以提供活动状态文字、媒体源、小组件、翻译、歌词转换、设置页和持久化数据。
+WinIsland 插件是通过 ABI v2 加载的 Windows DLL。插件先向 WinIsland 获取一项服务，再用它添加状态文字、媒体源、小组件或设置页等内容。当前 `winisland-plugin-api` 库版本为 `0.8`；现有宿主不能加载 ABI v1 DLL。
 
 > 插件与 WinIsland 在同一进程运行，没有沙箱。`extern "C"` 回调中的 panic 可能导致应用退出。
 
@@ -11,10 +11,32 @@ WinIsland 使用 ABI v2 加载受信任的 Windows 原生 DLL。当前 `winislan
 | [快速开始](/plugin-dev/quickstart) | 构建、加载并打包 ABI v2 插件 |
 | [ABI 与生命周期](/plugin-dev/abi-lifecycle) | 描述符校验、所有权、回调、卸载和迁移 |
 | [宿主服务](/plugin-dev/services) | 十一张服务表、绘制、设置与限制 |
+| [API 参考](/plugin-dev/api) | 每张公开服务表单独一页，列出方法、数据约定和限制 |
 | [打包与安装](/plugin-dev/packaging) | `plugin.yml`、ZIP、签名、安装和更新 |
 | [API 更新日志](/api-changelog) | 已发布库版本的历史记录 |
 
 完整的 Rust 签名请查看 [SDK 说明文档](https://github.com/WinIslandProject/WinIsland/tree/master/crates/winisland-plugin-api)和 [ABI 定义](https://github.com/WinIslandProject/WinIsland/tree/master/crates/winisland-plugin-api/src/abi)。
+
+## 先按想做的事找入口
+
+| 我想…… | 从这里开始 | 最终会做什么 |
+|---|---|---|
+| 在岛上显示一条状态或提醒 | [Context API](/plugin-dev/api/context) | 发布文字，需要时更新或移除。 |
+| 提供歌曲信息或播放控制 | [Media API](/plugin-dev/api/media) | 发布曲目；控制按钮还需要命令回调。 |
+| 在展开页画自己的内容 | [Widget API](/plugin-dev/api/widget) | 给网格小组件提交一整帧绘制内容。 |
+| 在设置中增加选项 | [Settings API](/plugin-dev/api/settings) 和 [Store API](/plugin-dev/api/store) | 描述控件，并单独保存用户选择。 |
+| 跟随当前歌曲或主题变化 | [Host State API](/plugin-dev/api/host-state) | 读取当前状态或订阅变化。 |
+| 修改显示出来的歌词 | [Lyrics Transform API](/plugin-dev/api/lyrics-transform) | 在显示前处理已解析的歌词行。 |
+
+第一次写插件，建议先做完[只显示一条状态的示例](/plugin-dev/quickstart)。其余服务及调用细节可在 [API 参考](/plugin-dev/api)中查找。
+
+## 先弄清三个词
+
+1. **能力位：**在插件描述符里声明“我需要用哪项服务”。这里仅日志服务不需要能力位。
+2. **服务表：**WinIsland 提供的一组函数。SDK 封装了常用操作；原始服务表提供完整接口。
+3. **资源：**插件创建的状态、小组件、设置页等。需要它时保留 ID 或 SDK 对象；关闭插件前释放。
+
+当前 API 通过明确的扩展点添加内容，不能任意替换 WinIsland 界面、拦截全部输入或修改宿主内部行为。例如小组件能绘制，但暂时没有鼠标或键盘回调。每个 API 页会说明当前能做到哪里。
 
 ## 运行模型
 

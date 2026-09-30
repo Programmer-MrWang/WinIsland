@@ -2,6 +2,8 @@
 
 可分发的 ABI v2 插件是 ZIP，根目录含 `plugin.yml` 及 `entry` 指定的 DLL。也可加入依赖 DLL 和资源。WinIsland 只把指定入口当作插件加载。
 
+根目录 DLL 适合本地快速试运行；要分享或更新插件，就用 ZIP。清单告诉 WinIsland 加载哪个 DLL，以及展示什么插件 ID 和版本。[快速开始](/plugin-dev/quickstart)中的 DLL 可以直接拿来打包。
+
 ## 使用 `PluginPackager` 构建
 
 为构建工具启用 `packager` 功能。在支持 ABI v2 的库发布到注册表之前，使用当前仓库源码；包版本为 `0.8.0`。
@@ -49,11 +51,22 @@ entry: hello_winisland_plugin.dll
 
 `id`、`name`、`author`、`version`、`description`、`github-link`、`abi-version` 和 `entry` 为必填。入口只能是 ZIP 根目录的单个 `.dll` 文件名。可选的 `icon`、`readme` 必须是归档中安全的相对路径。打包工具还可能添加 `dll_hashes` 与 `signature`。WinIsland 当前安装本地 ZIP 时不会强制校验清单签名、签名者身份或 `dll_hashes`；不能把这个可选签名描述为安装信任保证。
 
+以上面的快速开始示例为例，ZIP 根目录应至少有这些文件（其他资源可选）：
+
+```text
+plugin.yml
+hello_winisland_plugin.dll
+```
+
+`entry` 指向 ZIP 里面的 DLL 文件名，不是 ZIP 名或 Cargo 包名。若 DLL 被放进子目录，上面的清单就找不到它。
+
 ## 安装与更新
 
 WinIsland 运行时将 ZIP 拖到岛上。安装器校验归档和清单文件，在暂存目录解压，加载新 DLL 校验描述符与元数据，停止旧的打包插件，切换目录并启动新实例。替换失败时恢复旧目录并尝试重新加载旧插件。成功安装立即生效，无需重启。在“插件”页面可禁用、启用或卸载。
 
 本地开发时，也可以把 `.dll` 放入插件目录根部；这种安装方式没有清单文件，需在启动时加载。同 ID 的手动 DLL 应先移除，打包更新无法替换这个根目录文件。
+
+更新时沿用稳定的插件 ID，并给新包设置新版本。清单中的元数据必须与 DLL 描述符一致；只改 ZIP 文件名不会改变插件身份或版本。
 
 归档最多 4096 项、每项解压后最多 256 MiB、合计最多 512 MiB；根目录 `plugin.yml` 最多 1 MiB。指定 `entry` 必须存在。符号链接、路径穿越、绝对路径、设备路径、不安全 Windows 文件名和忽略大小写后的冲突都会被拒绝。解压失败会清理暂存目录。
 

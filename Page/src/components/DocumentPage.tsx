@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom'
 import rehypeHighlight from 'rehype-highlight'
 import { common } from 'lowlight'
 import remarkGfm from 'remark-gfm'
-import { copy, DOC_KEYS, localePath, type DocKey, type Locale } from '../content'
+import { copy, DOC_NAV_KEYS, localePath, type DocKey, type Locale } from '../content'
 import { docs } from '../docs'
 
 type RehypePlugin = NonNullable<ComponentProps<typeof ReactMarkdown>['rehypePlugins']>[number]
@@ -60,10 +60,10 @@ export default function DocumentPage({ locale, page }: { locale: Locale; page: D
       <aside className="docs-sidebar">
         <span>{text.docs.onThisPage}</span>
         <nav aria-label={text.docs.onThisPage}>
-          {DOC_KEYS.map((key) => (
+          {DOC_NAV_KEYS.map((key) => (
             <Link
               key={key}
-              className={`${page === key ? 'is-active' : ''}${key.startsWith('plugin-dev/') ? ' is-subpage' : ''}`.trim()}
+              className={`${page === key || (key === 'plugin-dev/api' && page.startsWith('plugin-dev/api/')) ? 'is-active' : ''}${key.startsWith('plugin-dev/') ? ' is-subpage' : ''}`.trim()}
               aria-current={page === key ? 'page' : undefined}
               to={localePath(locale, `/${key}`)}
             >

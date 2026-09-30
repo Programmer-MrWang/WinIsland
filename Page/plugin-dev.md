@@ -1,6 +1,6 @@
 # Plugin development
 
-WinIsland loads trusted Windows DLLs using ABI v2. The current `winisland-plugin-api` crate is `0.8`. ABI v1 packages and entry points are rejected. Plugins can provide contexts, media sources, widgets, translations, lyric transforms, settings pages, and persistent values.
+WinIsland plugins are Windows DLLs loaded through ABI v2. A plugin asks WinIsland for a service, then uses that service to add content such as activity text, a media source, a widget, or a settings page. The current `winisland-plugin-api` crate is `0.8`; ABI v1 DLLs cannot be loaded by the current host.
 
 > Plugins run inside WinIsland without a sandbox. A panic in an `extern "C"` callback can terminate the app.
 
@@ -11,10 +11,32 @@ WinIsland loads trusted Windows DLLs using ABI v2. The current `winisland-plugin
 | [Quickstart](/plugin-dev/quickstart) | Build, load, and package an ABI v2 plugin |
 | [ABI and lifecycle](/plugin-dev/abi-lifecycle) | Descriptor validation, ownership, callbacks, shutdown, and migration |
 | [Host services](/plugin-dev/services) | All eleven service tables, drawing, settings, and limits |
+| [API reference](/plugin-dev/api) | One page per public service table, with methods, data contracts, and limits |
 | [Packaging and installation](/plugin-dev/packaging) | `plugin.yml`, ZIPs, signing, installation, and updates |
 | [API changelog](/api-changelog) | Historical published crate release notes |
 
 See the [SDK README](https://github.com/WinIslandProject/WinIsland/tree/master/crates/winisland-plugin-api) and [ABI definitions](https://github.com/WinIslandProject/WinIsland/tree/master/crates/winisland-plugin-api/src/abi) for exact Rust signatures.
+
+## Start with what you want to build
+
+| I want to… | Start here | What to expect |
+|---|---|---|
+| Put a short status or alert on the island | [Context API](/plugin-dev/api/context) | Publish text, then update or remove it. |
+| Supply a song or playback controls | [Media API](/plugin-dev/api/media) | Publish track data; controls need a command callback. |
+| Draw my own content in the expanded island | [Widget API](/plugin-dev/api/widget) | Submit a complete drawing for a grid widget. |
+| Add options to WinIsland settings | [Settings API](/plugin-dev/api/settings) and [Store API](/plugin-dev/api/store) | Describe controls and save their values separately. |
+| React to the current song or theme | [Host State API](/plugin-dev/api/host-state) | Read a snapshot or subscribe to changes. |
+| Change displayed lyric text | [Lyrics Transform API](/plugin-dev/api/lyrics-transform) | Transform parsed lines before display. |
+
+Build the [one-context example](/plugin-dev/quickstart) first if you have not loaded a plugin before. The [API reference](/plugin-dev/api) covers the other services and their exact call contracts.
+
+## Three ideas to keep in mind
+
+1. **Capability:** a bit in the plugin descriptor declaring which service you intend to use. Log is the only service here without a capability bit.
+2. **Service table:** the set of functions WinIsland provides for that capability. The SDK wraps common calls; raw tables expose the full API.
+3. **Resource:** something you create, such as a context, widget, or settings page. Keep its ID or SDK wrapper while it is needed, then release it before shutdown completes.
+
+The current API adds content through defined extension points. It does not provide a general way to replace arbitrary WinIsland UI, intercept all input, or change the host's internals. In particular, widgets can draw but have no pointer or keyboard callback yet. See each API page for its current boundary.
 
 ## Runtime model
 

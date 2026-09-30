@@ -2,6 +2,8 @@
 
 本例构建完整的 ABI v2 DLL，发布一条活动状态文字。示例校验宿主输入，持有资源，在 `shutdown` 中释放资源，并在 `destroy` 中释放不透明实例。
 
+加载成功后，WinIsland 会注册标题为“Hello WinIsland”、正文为“ABI v2 plugin is running”的活动状态。它会一直存在，直到禁用插件或关闭 WinIsland；如果此时有更高优先级的内容，岛上可能暂时显示别的内容。
+
 ## 前置条件
 
 - Windows 10 2004 或更新版本，或 Windows 11
@@ -36,6 +38,8 @@ winisland-plugin-api = { git = "https://github.com/WinIslandProject/WinIsland" }
 ```
 
 包 ID、名称、版本、作者和描述必须与描述符、安装包清单一致。`repository` 中的网址会成为 `github-link`。
+
+`cdylib` 表示要生成 Windows DLL。`lib.name` 决定 DLL 文件名，`package.name` 是 Cargo 包名；这里 DLL 文件名使用下划线，所以两者不同。
 
 ## 实现 `src/lib.rs`
 
@@ -131,6 +135,8 @@ pub unsafe extern "C" fn winisland_plugin_entry_v2() -> *const PluginDescriptorV
 
 `PluginStatus` 是数字状态，不包含错误字符串。需要详细诊断时使用 `LogApiV2`。任何导出的 C 回调都不能让栈展开越过 C 边界。
 
+这里的 `create` 获取 Context 服务，并把返回的 `Resource` 存在 `Instance` 里。这一步很关键：如果资源只放在局部变量中，`create` 结束时它就会被丢弃，文字随即消失。`shutdown` 在宿主 API 仍可用时释放资源，`destroy` 最后释放实例内存。
+
 ## 构建并加载
 
 ```powershell
@@ -139,7 +145,15 @@ cargo clippy -- -D warnings
 cargo build --release
 ```
 
-DLL 位于 `target/release/hello_winisland_plugin.dll`。本地开发时可将它放入 WinIsland 插件目录根部，重启应用加载。根目录 DLL 属于没有 `plugin.yml` 的手动安装；同 ID 的打包版本安装前应移除手动 DLL。
+DLL 位于 `target/release/hello_winisland_plugin.dll`。正常的 Windows 安装中，WinIsland 插件目录是 `%APPDATA%\WinIsland\plugins`。本地试运行时，先关闭 WinIsland，把 DLL 复制到该目录，再启动应用：
+
+```powershell
+$pluginDir = Join-Path $env:APPDATA 'WinIsland\plugins'
+New-Item -ItemType Directory -Force -Path $pluginDir | Out-Null
+Copy-Item .\target\release\hello_winisland_plugin.dll $pluginDir
+```
+
+这种根目录 DLL 是没有 `plugin.yml` 的手动安装，启动时加载。可在“插件”页面确认它已启用。安装同 ID 的 ZIP 前先移除这个 DLL；打包更新无法替换手动文件。
 
 要分发 ZIP，阅读[打包与安装](/plugin-dev/packaging)。设置 `abi-version: 2`，并让 `entry` 等于 DLL 文件名。WinIsland 运行时也可以直接把 ZIP 拖到岛上。
 
@@ -148,3 +162,12 @@ DLL 位于 `target/release/hello_winisland_plugin.dll`。本地开发时可将�
 - 在[宿主服务](/plugin-dev/services)中了解媒体、小组件、设置、图片、存储和歌词接口。
 - 添加回调或线程前阅读 [ABI 与生命周期](/plugin-dev/abi-lifecycle)。
 - [SDK 小组件示例](https://github.com/WinIslandProject/WinIsland/blob/master/crates/winisland-plugin-api/examples/minimal_widget.rs)展示了 `DrawListBuilder` 的使用。
+
+## 看不到效果时
+
+| 现象 | 先检查 |
+|---|---|
+| “插件”页面找不到插件 | DLL 是否在插件目录根部、是否为 64 位 Windows 构建、是否导出 `winisland_plugin_entry_v2`？复制后要重启。 |
+| 找到了，但没有启用 | 在“插件”页面启用；仍失败时查看 WinIsland 日志中的加载错误。 |
+| 已启用，但文字没出现 | 可能有其他更高优先级的内容；确认 `create` 成功，且 `Resource` 一直保存在 `Instance` 中。 |
+| ZIP 安装拒绝 DLL | 按[打包指南](/plugin-dev/packaging)核对 `abi-version: 2`、`entry` 文件名，以及描述符和清单中的五项元数据。 |

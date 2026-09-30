@@ -2,6 +2,8 @@
 
 This example builds a complete ABI v2 DLL that publishes one context. It validates the host input, keeps the resource alive, releases it during `shutdown`, and frees the opaque instance in `destroy`.
 
+After loading it, WinIsland has an activity named “Hello WinIsland” with the text “ABI v2 plugin is running.” The context stays registered until you disable the plugin or close WinIsland. Other higher-priority content can temporarily take the island's display space.
+
 ## Prerequisites
 
 - Windows 10 version 2004 or later, or Windows 11
@@ -36,6 +38,8 @@ winisland-plugin-api = { git = "https://github.com/WinIslandProject/WinIsland" }
 ```
 
 The package ID, name, version, author, and description must agree with the descriptor and the packaged manifest. The repository URL supplies `github-link`.
+
+`cdylib` tells Rust to produce a Windows DLL. The `lib.name` value determines the DLL filename, while `package.name` is the Cargo package name. They differ here because DLL filenames use underscores.
 
 ## Implement `src/lib.rs`
 
@@ -131,6 +135,8 @@ pub unsafe extern "C" fn winisland_plugin_entry_v2() -> *const PluginDescriptorV
 
 `PluginStatus` is a numeric status; it does not carry an error string. Log diagnostic details through `LogApiV2` when needed. Do not unwind through any exported C callback.
 
+In this example, `create` asks for Context and stores the returned `Resource` in `Instance`. Keeping it there matters: if the `Resource` were only a local variable, Rust would drop it as `create` returned and the text would disappear. `shutdown` drops the resource while the host API is still valid; `destroy` then frees the instance allocation.
+
 ## Build and load
 
 ```powershell
@@ -139,7 +145,15 @@ cargo clippy -- -D warnings
 cargo build --release
 ```
 
-The DLL is `target/release/hello_winisland_plugin.dll`. During local development, place it in the root of WinIsland's plugin directory and restart the app. Root-level DLLs are manual installations and have no `plugin.yml`. Remove a manual DLL before installing a packaged copy with the same ID.
+The DLL is `target/release/hello_winisland_plugin.dll`. On a normal Windows installation, WinIsland's plugin directory is `%APPDATA%\WinIsland\plugins`. For a quick local run, close WinIsland, copy the DLL into that directory, then start WinIsland again:
+
+```powershell
+$pluginDir = Join-Path $env:APPDATA 'WinIsland\plugins'
+New-Item -ItemType Directory -Force -Path $pluginDir | Out-Null
+Copy-Item .\target\release\hello_winisland_plugin.dll $pluginDir
+```
+
+This is a manual installation: the root-level DLL has no `plugin.yml` and loads at startup. Check the Plugins page to confirm it is enabled. Remove that DLL before installing a ZIP with the same plugin ID; a packaged update cannot replace the manual copy.
 
 For a distributable ZIP, follow [Packaging and installation](/plugin-dev/packaging). Set `abi-version: 2` and make `entry` equal to the DLL filename. You can also drop the ZIP onto the island while WinIsland is running.
 
@@ -148,3 +162,12 @@ For a distributable ZIP, follow [Packaging and installation](/plugin-dev/packagi
 - Use [Host services](/plugin-dev/services) for Media, Widgets, Settings, Images, Store, and lyrics.
 - Use [ABI and lifecycle](/plugin-dev/abi-lifecycle) before adding callbacks or threads.
 - See the [SDK widget example](https://github.com/WinIslandProject/WinIsland/blob/master/crates/winisland-plugin-api/examples/minimal_widget.rs) for `DrawListBuilder` usage.
+
+## If nothing appears
+
+| Symptom | Check |
+|---|---|
+| Plugin is absent from the Plugins page | Is the DLL in the plugin directory root, built for 64-bit Windows, and exporting `winisland_plugin_entry_v2`? Restart after copying it. |
+| Plugin is listed but inactive | Enable it in the Plugins page; check WinIsland's log for the loader error if it still fails. |
+| Plugin is active but the text is not visible | Other content may currently have priority. Check that `create` succeeded and that the `Resource` remains stored in `Instance`. |
+| ZIP installation rejects the DLL | Check `abi-version: 2`, the `entry` filename, and the five descriptor/manifest metadata fields in [Packaging](/plugin-dev/packaging). |

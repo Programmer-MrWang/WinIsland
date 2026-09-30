@@ -9,6 +9,18 @@ export type DocKey =
   | 'plugin-dev/quickstart'
   | 'plugin-dev/abi-lifecycle'
   | 'plugin-dev/services'
+  | 'plugin-dev/api'
+  | 'plugin-dev/api/context'
+  | 'plugin-dev/api/media'
+  | 'plugin-dev/api/i18n'
+  | 'plugin-dev/api/host-state'
+  | 'plugin-dev/api/widget'
+  | 'plugin-dev/api/lyrics-transform'
+  | 'plugin-dev/api/settings'
+  | 'plugin-dev/api/text'
+  | 'plugin-dev/api/image'
+  | 'plugin-dev/api/store'
+  | 'plugin-dev/api/log'
   | 'plugin-dev/packaging'
   | 'api-changelog'
   | 'changelog'
@@ -22,10 +34,24 @@ export const DOC_KEYS: DocKey[] = [
   'plugin-dev/quickstart',
   'plugin-dev/abi-lifecycle',
   'plugin-dev/services',
+  'plugin-dev/api',
+  'plugin-dev/api/context',
+  'plugin-dev/api/media',
+  'plugin-dev/api/i18n',
+  'plugin-dev/api/host-state',
+  'plugin-dev/api/widget',
+  'plugin-dev/api/lyrics-transform',
+  'plugin-dev/api/settings',
+  'plugin-dev/api/text',
+  'plugin-dev/api/image',
+  'plugin-dev/api/store',
+  'plugin-dev/api/log',
   'plugin-dev/packaging',
   'api-changelog',
   'changelog',
 ]
+
+export const DOC_NAV_KEYS = DOC_KEYS.filter((key) => !key.startsWith('plugin-dev/api/'))
 
 export const localePath = (locale: Locale, path = '/') => {
   const cleanPath = path.startsWith('/') ? path : `/${path}`
@@ -128,6 +154,18 @@ export const copy = {
         'plugin-dev/quickstart': 'Plugin quickstart',
         'plugin-dev/abi-lifecycle': 'ABI and lifecycle',
         'plugin-dev/services': 'Host services',
+        'plugin-dev/api': 'API reference',
+        'plugin-dev/api/context': 'Context API',
+        'plugin-dev/api/media': 'Media API',
+        'plugin-dev/api/i18n': 'I18n API',
+        'plugin-dev/api/host-state': 'Host State API',
+        'plugin-dev/api/widget': 'Widget API',
+        'plugin-dev/api/lyrics-transform': 'Lyrics Transform API',
+        'plugin-dev/api/settings': 'Settings API',
+        'plugin-dev/api/text': 'Text API',
+        'plugin-dev/api/image': 'Image API',
+        'plugin-dev/api/store': 'Store API',
+        'plugin-dev/api/log': 'Log API',
         'plugin-dev/packaging': 'Packaging and installation',
         'api-changelog': 'API changelog',
         changelog: 'Changelog',
@@ -233,6 +271,18 @@ export const copy = {
         'plugin-dev/quickstart': '插件快速开始',
         'plugin-dev/abi-lifecycle': 'ABI 与生命周期',
         'plugin-dev/services': '宿主服务',
+        'plugin-dev/api': 'API 参考',
+        'plugin-dev/api/context': 'Context API',
+        'plugin-dev/api/media': 'Media API',
+        'plugin-dev/api/i18n': 'I18n API',
+        'plugin-dev/api/host-state': 'Host State API',
+        'plugin-dev/api/widget': 'Widget API',
+        'plugin-dev/api/lyrics-transform': 'Lyrics Transform API',
+        'plugin-dev/api/settings': 'Settings API',
+        'plugin-dev/api/text': 'Text API',
+        'plugin-dev/api/image': 'Image API',
+        'plugin-dev/api/store': 'Store API',
+        'plugin-dev/api/log': 'Log API',
         'plugin-dev/packaging': '打包与安装',
         'api-changelog': 'API 更新日志',
         changelog: '更新日志',

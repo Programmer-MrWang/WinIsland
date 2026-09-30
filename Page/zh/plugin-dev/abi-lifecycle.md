@@ -2,6 +2,16 @@
 
 ABI v2 是进程内原生契约。边界上只传递 C 兼容值、带长度的结构体、不透明句柄和借用字节区间。宿主无法验证任意原生指针是否可读；插件必须保证指针在约定期间有效。
 
+简单说，WinIsland 加载 DLL 后，调用一次 `create` 创建实例；运行中调用已注册的回调；结束时先让 `shutdown` 停止，再由 `destroy` 释放实例。只要插件代码或回调还可能运行，DLL 就不能卸载。
+
+| 阶段 | 插件要做什么 | 宿主会做什么 |
+|---|---|---|
+| 入口 | 返回一直有效的描述符。 | 校验元数据、ABI、能力位和回调。 |
+| `create` | 校验输入，创建实例，保留资源和回调数据。 | 提供实例令牌和服务表。 |
+| 运行中 | 更新或提交内容，处理回调。 | 负责调度，校验资源与绘制内容。 |
+| `shutdown` | 停止自己的线程并释放资源；安全后才返回 `Ok`。 | 成功后撤销剩余资源。 |
+| `destroy` | 只释放一次实例指针。 | 清理完成后卸载 DLL。 |
+
 ## 入口和描述符
 
 导出 `winisland_plugin_entry_v2`，返回在 DLL 卸载前始终有效且不变的描述符（`PluginDescriptorV2`）：
@@ -30,6 +40,8 @@ pub unsafe extern "C" fn winisland_plugin_entry_v2() -> *const PluginDescriptorV
 `PluginToken`、`ResourceId`、`WidgetId` 和 `ImageId` 是不透明标识。资源归创建它的令牌所有；过期、属于其他插件或类型错误的句柄会被拒绝。同步服务调用会复制借用的请求数据。SDK 的 `Resource`、`Widget` 和 `ImageHandle` 在析构时释放资源；应在 `shutdown` 返回前完成析构。原始 ABI 调用者须显式释放 ID。`shutdown` 成功后，宿主撤销剩余资源。
 
 `PluginStatus` 包括 `Ok`、`InvalidArgument`、`StaleHandle`、`CapabilityMissing`、`LimitExceeded`、`UnsupportedVersion`、`IoError` 和 `Internal`。绘制列表提交成功只表示字节已复制，校验与渲染稍后进行。
+
+服务返回 `StaleHandle` 时，先看资源是否已释放，或 ID 是否来自另一个插件、另一种资源；返回 `CapabilityMissing` 时，检查描述符能力位。`LimitExceeded` 可能表示数量超限、输出缓冲区太小，也可能是回调还在运行而暂不能释放；具体规则见对应 [API 页面](/plugin-dev/api)。
 
 ## 定时回调与卸载
 

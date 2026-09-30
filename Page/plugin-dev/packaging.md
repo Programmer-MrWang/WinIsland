@@ -2,6 +2,8 @@
 
 A distributable ABI v2 plugin is a ZIP with root-level `plugin.yml` and the DLL named by `entry`. Dependency DLLs and assets may also be included. WinIsland loads only the declared entry as a plugin.
 
+Use a root-level DLL only for a quick local run. Use a ZIP when you want to share or update the plugin: the manifest tells WinIsland which DLL to load and which identity/version to show. The [quickstart](/plugin-dev/quickstart) provides a DLL you can package.
+
 ## Build with PluginPackager
 
 Enable the packager feature for a small build tool. Use the current repository source until the ABI v2 crate is available from the registry; the package version is `0.8.0`.
@@ -49,11 +51,22 @@ entry: hello_winisland_plugin.dll
 
 `id`, `name`, `author`, `version`, `description`, `github-link`, `abi-version`, and `entry` are required. The entry must be a single root-level `.dll` filename. Optional `icon` and `readme` are safe relative paths to files in the archive. The packager may add `dll_hashes` and `signature`. WinIsland currently does not enforce a local ZIP's manifest signature, signer identity, or `dll_hashes` during installation. Do not present that optional signature as an installation trust guarantee.
 
+For the quickstart example, the ZIP root should look like this (other assets are optional):
+
+```text
+plugin.yml
+hello_winisland_plugin.dll
+```
+
+The `entry` value refers to the DLL inside the ZIP, not the name of the ZIP or the Cargo package. A DLL nested under another folder will not match this manifest.
+
 ## Install and update
 
 Drop the ZIP onto the island while WinIsland is running. The installer validates the archive and manifest, extracts to staging, loads the new DLL for descriptor/metadata validation, stops an existing packaged instance, swaps the directory, and starts the new instance. A failed replacement restores the previous directory and attempts to reload the old plugin. A successful install is available immediately; no restart is required. The Plugins page can enable, disable, and uninstall it.
 
 For manual development, a root-level `.dll` in the plugin directory is loaded on startup without a manifest. Remove a manual DLL with the same plugin ID before installing the ZIP; a packaged update cannot replace that root DLL.
+
+An update uses the same stable plugin ID with a new package version. Keep the manifest metadata in sync with the DLL descriptor; changing only the ZIP filename does not update the plugin's identity or version.
 
 Archive checks include at most 4096 entries, 256 MiB per entry, 512 MiB total uncompressed, and a root `plugin.yml` of at most 1 MiB. The exact `entry` must exist. Symlinks, traversal, absolute or device paths, unsafe Windows names, and case-insensitive collisions are rejected. Failed extraction removes staging data.
 
