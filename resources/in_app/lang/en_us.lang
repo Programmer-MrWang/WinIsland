@@ -191,3 +191,4 @@ resource_editor_hint=Enable metrics, choose their style and color, and adjust th
 resource_style_bar=Bar
 resource_style_ring=Ring
 resource_size=Expanded size
+resource_editor_done=Done

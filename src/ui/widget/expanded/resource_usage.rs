@@ -169,11 +169,24 @@ fn draw_ring(
 ) {
     let value = usage.value.unwrap_or_default();
     let accent = usage_color(metric_color(config.color), value);
-    let inset = 7.0 * scale;
-    let diameter = (bounds.height() * 0.64)
-        .min(bounds.width() * 0.38)
+    let fonts = FontManager::global();
+    let inset = 5.0 * scale;
+    let label_gap = 3.0 * scale;
+    let mut label_size = (bounds.height() * 0.16).clamp(4.0 * scale, 9.0 * scale);
+    let label_space = (bounds.width() - inset * 2.0).max(1.0);
+    let measured_label = fonts.measure_text_cached(
+        config.kind.label(),
+        label_size,
+        winisland_render::FontStyle::bold(),
+    );
+    if measured_label > label_space {
+        label_size = (label_size * label_space / measured_label).max(3.5 * scale);
+    }
+    let diameter = (bounds.height() - inset * 2.0 - label_size - label_gap)
+        .min(bounds.width() - inset * 2.0)
         .max(12.0 * scale);
-    let center = Point::new(bounds.right - inset - diameter / 2.0, bounds.center_y());
+    let group_top = bounds.center_y() - (diameter + label_gap + label_size) / 2.0;
+    let center = Point::new(bounds.center_x(), group_top + diameter / 2.0);
     let ring = Rect::from_xywh(
         center.x - diameter / 2.0,
         center.y - diameter / 2.0,
@@ -197,7 +210,6 @@ fn draw_ring(
             StrokeCap::Round,
         );
     }
-    let fonts = FontManager::global();
     let mut value_size = (diameter * 0.22).clamp(4.0 * scale, 9.0 * scale);
     let max_value_width = diameter * 0.78;
     let mut value_width =
@@ -217,21 +229,16 @@ fn draw_ring(
         color: alpha_color(text_color, alpha),
         blur: None,
     });
-    let mut label_size = (bounds.height() * 0.22).clamp(4.0 * scale, 10.0 * scale);
-    let label_space = (ring.left - bounds.left - inset - 2.0 * scale).max(1.0);
-    let measured_label = fonts.measure_text_cached(
+    let label_width = fonts.measure_text_cached(
         config.kind.label(),
         label_size,
         winisland_render::FontStyle::bold(),
     );
-    if measured_label > label_space {
-        label_size = (label_size * label_space / measured_label).max(3.5 * scale);
-    }
     fonts.draw_text_cached(DrawTextCachedParams {
         painter,
         text: config.kind.label(),
-        x: bounds.left + inset,
-        y: bounds.center_y() + label_size * 0.34,
+        x: center.x - label_width / 2.0,
+        y: ring.bottom + label_gap + label_size * 0.8,
         size: label_size,
         bold: true,
         color: alpha_color(accent, (alpha as f32 * 0.84) as u8),

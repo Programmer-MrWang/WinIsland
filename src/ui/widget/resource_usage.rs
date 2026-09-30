@@ -4,7 +4,8 @@ use std::time::{Duration, Instant};
 use winisland_platform::{MetricSelection, SystemSample};
 
 use winisland_core::config::{
-    ResourceMetricConfig, ResourceMetricKind, default_resource_metrics, normalize_resource_metrics,
+    ResourceMetricConfig, ResourceMetricKind, ResourceMetricStyle, default_resource_metrics,
+    normalize_resource_metrics,
 };
 use winisland_render::Rgba;
 
@@ -241,10 +242,28 @@ pub(crate) fn with_compact_config<R>(read: impl FnOnce(&[ResourceMetricConfig]) 
     COMPACT_RESOURCE_CONFIG.with(|cell| read(&cell.borrow()))
 }
 
+pub(crate) const COMPACT_METRIC_GAP: f32 = 4.0;
+
+pub(crate) fn compact_metric_width(style: ResourceMetricStyle) -> f32 {
+    match style {
+        ResourceMetricStyle::Bar => 66.0,
+        ResourceMetricStyle::Ring => 50.0,
+    }
+}
+
 pub(crate) fn compact_width() -> f32 {
     with_compact_config(|config| {
-        let enabled = config.iter().filter(|metric| metric.enabled).count().max(1);
-        (enabled as f32 * 66.0).max(132.0)
+        let (count, width) = config
+            .iter()
+            .filter(|metric| metric.enabled)
+            .fold((0, 0.0), |(count, width), metric| {
+                (count + 1, width + compact_metric_width(metric.style))
+            });
+        if count == 0 {
+            compact_metric_width(ResourceMetricStyle::Bar)
+        } else {
+            width + COMPACT_METRIC_GAP * (count - 1) as f32
+        }
     })
 }
 

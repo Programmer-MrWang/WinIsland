@@ -6,18 +6,27 @@ use winisland_core::config::{
 };
 use winisland_core::i18n::tr;
 use winisland_render::text::{DrawTextCachedParams, FontManager};
-use winisland_render::{Painter, Point, Radius, Rect, Rgba, StrokeCap};
+use winisland_render::{Angle, Painter, Point, Radius, Rect, Rgba, StrokeCap};
 
 use super::{PopupState, SettingsApp};
 use crate::utils::settings_ui::WidgetEditorMode;
 
-const DIALOG_WIDTH: f32 = 548.0;
-const EXPANDED_DIALOG_HEIGHT: f32 = 526.0;
-const COMPACT_DIALOG_HEIGHT: f32 = 496.0;
-const EXPANDED_HEADER_HEIGHT: f32 = 122.0;
-const COMPACT_HEADER_HEIGHT: f32 = 92.0;
-const ROW_HEIGHT: f32 = 72.0;
-const ROW_GAP: f32 = 6.0;
+const DIALOG_WIDTH: f32 = 520.0;
+const DIALOG_RADIUS: f32 = 14.0;
+const DIALOG_PADDING: f32 = 20.0;
+const GROUP_RADIUS: f32 = 10.0;
+const SIZE_GROUP_TOP: f32 = 74.0;
+const SIZE_GROUP_HEIGHT: f32 = 44.0;
+const EXPANDED_LIST_TOP: f32 = 132.0;
+const COMPACT_LIST_TOP: f32 = 76.0;
+const ROW_HEIGHT: f32 = 52.0;
+const FOOTER_HEIGHT: f32 = 68.0;
+const NAME_LEFT: f32 = 76.0;
+const SEGMENT_WIDTH: f32 = 112.0;
+const SEGMENT_HEIGHT: f32 = 24.0;
+const SWATCH_DIAMETER: f32 = 18.0;
+const SWITCH_WIDTH: f32 = 32.0;
+const SWITCH_HEIGHT: f32 = 18.0;
 const COLORS: [u32; 10] = [
     0x0a84ff, 0x32bef6, 0x30d158, 0xff9f0a, 0xff453a, 0xff375f, 0xaf52de, 0x64d2ff, 0xffffff,
     0x8e8e93,
@@ -35,7 +44,7 @@ const SIZE_OPTIONS: [(usize, usize); 8] = [
 
 #[derive(Clone, Copy)]
 enum EditorControl {
-    Close,
+    Done,
     Toggle(usize),
     Bar(usize),
     Ring(usize),
@@ -43,6 +52,73 @@ enum EditorControl {
     MoveUp(usize),
     MoveDown(usize),
     SizeDropdown,
+}
+
+struct RowLayout {
+    row: Rect,
+    up: Rect,
+    down: Rect,
+    glyph: Rect,
+    style: Rect,
+    color: Rect,
+    toggle: Rect,
+}
+
+impl RowLayout {
+    fn new(list: Rect, index: usize) -> Self {
+        let row = Rect::from_xywh(
+            list.left,
+            list.top + index as f32 * ROW_HEIGHT,
+            list.width(),
+            ROW_HEIGHT,
+        );
+        let center_y = row.center_y();
+        let toggle = Rect::from_xywh(
+            row.right - 14.0 - SWITCH_WIDTH,
+            center_y - SWITCH_HEIGHT / 2.0,
+            SWITCH_WIDTH,
+            SWITCH_HEIGHT,
+        );
+        let color = Rect::from_xywh(
+            toggle.left - 18.0 - SWATCH_DIAMETER,
+            center_y - SWATCH_DIAMETER / 2.0,
+            SWATCH_DIAMETER,
+            SWATCH_DIAMETER,
+        );
+        let style = Rect::from_xywh(
+            color.left - 16.0 - SEGMENT_WIDTH,
+            center_y - SEGMENT_HEIGHT / 2.0,
+            SEGMENT_WIDTH,
+            SEGMENT_HEIGHT,
+        );
+        Self {
+            row,
+            up: Rect::from_xywh(row.left + 12.0, center_y - 17.0, 18.0, 17.0),
+            down: Rect::from_xywh(row.left + 12.0, center_y, 18.0, 17.0),
+            glyph: Rect::from_xywh(row.left + 40.0, center_y - 12.0, 24.0, 24.0),
+            style,
+            color,
+            toggle,
+        }
+    }
+
+    fn bar_segment(&self) -> Rect {
+        Rect::from_xywh(
+            self.style.left,
+            self.style.top,
+            self.style.width() / 2.0,
+            self.style.height(),
+        )
+    }
+
+    fn ring_segment(&self) -> Rect {
+        Rect::from_xywh(
+            self.style.center_x(),
+            self.style.top,
+            self.style.width() / 2.0,
+            self.style.height(),
+        )
+    }
 }
 
 impl SettingsApp {
@@ -62,20 +138,19 @@ impl SettingsApp {
         }
     }
 
-    fn resource_editor_header_height(&self) -> f32 {
+    fn resource_editor_list_top(&self) -> f32 {
         match self.widget_editor_mode {
-            WidgetEditorMode::Expanded => EXPANDED_HEADER_HEIGHT,
-            WidgetEditorMode::Compact => COMPACT_HEADER_HEIGHT,
+            WidgetEditorMode::Expanded => EXPANDED_LIST_TOP,
+            WidgetEditorMode::Compact => COMPACT_LIST_TOP,
         }
     }
 
     fn resource_editor_rect(&self) -> Rect {
         let (window_width, window_height) = self.logical_window_size();
         let width = DIALOG_WIDTH.min(window_width - 28.0);
-        let desired_height = match self.widget_editor_mode {
-            WidgetEditorMode::Expanded => EXPANDED_DIALOG_HEIGHT,
-            WidgetEditorMode::Compact => COMPACT_DIALOG_HEIGHT,
-        };
+        let desired_height = self.resource_editor_list_top()
+            + self.resource_editor_metrics().len() as f32 * ROW_HEIGHT
+            + FOOTER_HEIGHT;
         let height = desired_height.min(window_height - 28.0);
         Rect::from_xywh(
             (window_width - width) / 2.0,
@@ -85,51 +160,46 @@ impl SettingsApp {
         )
     }
 
+    fn resource_editor_list_rect(&self, dialog: Rect) -> Rect {
+        Rect::from_xywh(
+            dialog.left + DIALOG_PADDING,
+            dialog.top + self.resource_editor_list_top(),
+            dialog.width() - DIALOG_PADDING * 2.0,
+            self.resource_editor_metrics().len() as f32 * ROW_HEIGHT,
+        )
+    }
+
     fn resource_editor_control(&self, x: f32, y: f32) -> Option<EditorControl> {
         let dialog = self.resource_editor_rect();
         let point = Point::new(x, y);
         if !dialog.contains(point) {
             return None;
         }
-        let close = Rect::from_xywh(dialog.right - 50.0, dialog.top + 24.0, 30.0, 30.0);
-        if close.contains(point) {
-            return Some(EditorControl::Close);
+        if done_button(dialog).contains(point) {
+            return Some(EditorControl::Done);
         }
         if self.widget_editor_mode == WidgetEditorMode::Expanded
             && resource_size_button(dialog).contains(point)
         {
             return Some(EditorControl::SizeDropdown);
         }
-        let rows_top = dialog.top + self.resource_editor_header_height();
+        let list = self.resource_editor_list_rect(dialog);
         for index in 0..self.resource_editor_metrics().len() {
-            let row = Rect::from_xywh(
-                dialog.left + 20.0,
-                rows_top + index as f32 * (ROW_HEIGHT + ROW_GAP),
-                dialog.width() - 40.0,
-                ROW_HEIGHT,
-            );
-            if !row.contains(point) {
+            let layout = RowLayout::new(list, index);
+            if !layout.row.contains(point) {
                 continue;
             }
-            let center_y = row.center_y();
-            let up = Rect::from_xywh(row.left + 10.0, center_y - 13.0, 24.0, 26.0);
-            let down = Rect::from_xywh(row.left + 36.0, center_y - 13.0, 24.0, 26.0);
-            let toggle = Rect::from_xywh(row.left + 72.0, center_y - 11.0, 38.0, 22.0);
-            let style = Rect::from_xywh(row.right - 190.0, center_y - 15.0, 120.0, 30.0);
-            let color = Rect::from_xywh(row.right - 48.0, center_y - 16.0, 32.0, 32.0);
-            return if up.contains(point) {
+            return if layout.up.contains(point) {
                 Some(EditorControl::MoveUp(index))
-            } else if down.contains(point) {
+            } else if layout.down.contains(point) {
                 Some(EditorControl::MoveDown(index))
-            } else if toggle.contains(point) {
+            } else if layout.toggle.contains(point) {
                 Some(EditorControl::Toggle(index))
-            } else if Rect::from_xywh(style.left, style.top, style.width() / 2.0, style.height())
-                .contains(point)
-            {
+            } else if layout.bar_segment().contains(point) {
                 Some(EditorControl::Bar(index))
-            } else if style.contains(point) {
+            } else if layout.ring_segment().contains(point) {
                 Some(EditorControl::Ring(index))
-            } else if color.contains(point) {
+            } else if layout.color.contains(point) {
                 Some(EditorControl::Color(index))
             } else {
                 None
@@ -152,7 +222,7 @@ impl SettingsApp {
             return;
         };
         match control {
-            EditorControl::Close => self.resource_editor_open = false,
+            EditorControl::Done => self.resource_editor_open = false,
             EditorControl::Toggle(index) => {
                 if let Some(metric) = self.resource_editor_metrics_mut().get_mut(index) {
                     metric.enabled = !metric.enabled;
@@ -271,26 +341,10 @@ impl SettingsApp {
         }
         painter.fill_rect(
             Rect::from_xywh(0.0, 0.0, win_w, win_h),
-            Rgba::from_argb(138, 0, 0, 0),
+            Rgba::from_argb(96, 0, 0, 0),
         );
         let dialog = self.resource_editor_rect();
-        painter.fill_round_rect(
-            Rect::from_xywh(
-                dialog.left,
-                dialog.top + 8.0,
-                dialog.width(),
-                dialog.height(),
-            ),
-            Radius::uniform(20.0),
-            settings_color(theme.shadow),
-        );
-        painter.fill_round_rect(dialog, Radius::uniform(20.0), settings_color(theme.win_bg));
-        painter.stroke_round_rect(
-            dialog,
-            Radius::uniform(20.0),
-            1.0,
-            settings_color(theme.popup_border),
-        );
+        draw_sheet(painter, dialog, theme);
 
         draw_text(
             painter,
@@ -298,167 +352,115 @@ impl SettingsApp {
                 WidgetEditorMode::Expanded => "resource_editor_title_expanded",
                 WidgetEditorMode::Compact => "resource_editor_title_compact",
             }),
-            dialog.left + 20.0,
-            dialog.top + 41.0,
-            21.0,
+            dialog.left + DIALOG_PADDING,
+            dialog.top + 36.0,
+            17.0,
             true,
             settings_color(theme.text_pri),
         );
         draw_text(
             painter,
             &tr("resource_editor_hint"),
-            dialog.left + 20.0,
-            dialog.top + 65.0,
+            dialog.left + DIALOG_PADDING,
+            dialog.top + 56.0,
             12.0,
             false,
             settings_color(theme.text_sec),
         );
+
         if self.widget_editor_mode == WidgetEditorMode::Expanded {
+            let group = size_group(dialog);
+            draw_group(painter, group, theme);
             draw_text(
                 painter,
                 &tr("resource_size"),
-                dialog.left + 20.0,
-                dialog.top + 98.0,
-                12.0,
-                true,
-                settings_color(theme.text_sec),
+                group.left + 14.0,
+                group.center_y() + 4.5,
+                13.0,
+                false,
+                settings_color(theme.text_pri),
             );
             let button = resource_size_button(dialog);
-            painter.fill_round_rect(
-                button,
-                Radius::uniform(8.0),
-                settings_color(theme.control_bg),
-            );
-            painter.stroke_round_rect(
-                button,
-                Radius::uniform(8.0),
-                0.75,
-                settings_color(theme.control_border),
-            );
+            draw_raised_control(painter, button, 7.0, theme);
             draw_text(
                 painter,
                 &format!(
                     "{} × {}",
                     self.config.resource_widget_columns, self.config.resource_widget_rows
                 ),
-                button.left + 12.0,
+                button.left + 11.0,
                 button.center_y() + 4.0,
                 12.0,
                 false,
                 settings_color(theme.text_pri),
             );
-            draw_dropdown_arrow(painter, button.right - 15.0, button.center_y(), theme);
+            draw_popup_chevrons(painter, button.right - 14.0, button.center_y(), theme);
         }
-        let close = Rect::from_xywh(dialog.right - 50.0, dialog.top + 24.0, 30.0, 30.0);
-        painter.fill_circle(
-            Point::new(close.center_x(), close.center_y()),
-            15.0,
-            settings_color(theme.control_bg),
-        );
-        painter.stroke_line(
-            Point::new(close.center_x() - 4.0, close.center_y() - 4.0),
-            Point::new(close.center_x() + 4.0, close.center_y() + 4.0),
-            1.8,
-            settings_color(theme.text_sec),
-            StrokeCap::Round,
-        );
-        painter.stroke_line(
-            Point::new(close.center_x() + 4.0, close.center_y() - 4.0),
-            Point::new(close.center_x() - 4.0, close.center_y() + 4.0),
-            1.8,
-            settings_color(theme.text_sec),
-            StrokeCap::Round,
-        );
 
-        let rows_top = dialog.top + self.resource_editor_header_height();
+        let list = self.resource_editor_list_rect(dialog);
         let metrics = self.resource_editor_metrics();
+        draw_group(painter, list, theme);
         for (index, metric) in metrics.iter().enumerate() {
-            let row = Rect::from_xywh(
-                dialog.left + 20.0,
-                rows_top + index as f32 * (ROW_HEIGHT + ROW_GAP),
-                dialog.width() - 40.0,
-                ROW_HEIGHT,
-            );
-            painter.fill_round_rect(row, Radius::uniform(13.0), settings_color(theme.group_bg));
-            let center_y = row.center_y();
-            draw_order_button(
+            let layout = RowLayout::new(list, index);
+            let center_y = layout.row.center_y();
+            if index > 0 {
+                painter.fill_rect(
+                    Rect::from_xywh(
+                        layout.row.left + NAME_LEFT,
+                        layout.row.top,
+                        layout.row.width() - NAME_LEFT,
+                        1.0,
+                    ),
+                    settings_color(theme.separator),
+                );
+            }
+            draw_stepper(
                 painter,
-                row.left + 10.0,
-                center_y - 13.0,
-                true,
+                &layout,
                 index > 0,
-                theme,
-            );
-            draw_order_button(
-                painter,
-                row.left + 36.0,
-                center_y - 13.0,
-                false,
                 index + 1 < metrics.len(),
                 theme,
             );
-            draw_switch(
+            let accent = rgb(metric.color);
+            draw_style_glyph(
                 painter,
-                row.left + 72.0,
-                center_y - 11.0,
-                metric.enabled,
+                layout.glyph,
+                metric.style,
+                if metric.enabled {
+                    accent
+                } else {
+                    settings_color(theme.disabled)
+                },
                 theme,
             );
             draw_text(
                 painter,
                 metric_name(metric.kind),
-                row.left + 122.0,
-                center_y + 5.0,
-                14.0,
+                layout.row.left + NAME_LEFT,
+                center_y + 4.5,
+                13.0,
                 true,
-                if metric.enabled {
-                    settings_color(theme.text_pri)
+                settings_color(if metric.enabled {
+                    theme.text_pri
                 } else {
-                    settings_color(theme.disabled)
-                },
+                    theme.disabled
+                }),
             );
-
-            let style = Rect::from_xywh(row.right - 190.0, center_y - 15.0, 120.0, 30.0);
-            painter.fill_round_rect(
-                style,
-                Radius::uniform(8.0),
-                settings_color(theme.control_bg),
-            );
-            let selected = match metric.style {
-                ResourceMetricStyle::Bar => {
-                    Rect::from_xywh(style.left + 2.0, style.top + 2.0, 58.0, 26.0)
-                }
-                ResourceMetricStyle::Ring => {
-                    Rect::from_xywh(style.left + 60.0, style.top + 2.0, 58.0, 26.0)
-                }
-            };
-            painter.fill_round_rect(selected, Radius::uniform(6.0), settings_color(theme.accent));
-            draw_centered_text(
-                painter,
-                &tr("resource_style_bar"),
-                Rect::from_xywh(style.left, style.top, 60.0, 30.0),
-                11.0,
-                metric.style == ResourceMetricStyle::Bar,
-                theme,
-            );
-            draw_centered_text(
-                painter,
-                &tr("resource_style_ring"),
-                Rect::from_xywh(style.left + 60.0, style.top, 60.0, 30.0),
-                11.0,
-                metric.style == ResourceMetricStyle::Ring,
-                theme,
-            );
-
-            let color = rgb(metric.color);
-            painter.fill_circle(Point::new(row.right - 32.0, center_y), 14.0, color);
-            painter.stroke_circle(
-                Point::new(row.right - 32.0, center_y),
-                14.0,
-                1.0,
-                settings_color(theme.text_pri).with_alpha(90),
-            );
+            draw_segmented(painter, &layout, metric.style, theme);
+            draw_swatch(painter, layout.color, accent, theme);
+            draw_switch(painter, layout.toggle, metric.enabled, theme);
         }
+
+        let done = done_button(dialog);
+        painter.fill_round_rect(done, Radius::uniform(7.0), settings_color(theme.accent));
+        draw_centered_text(
+            painter,
+            &tr("resource_editor_done"),
+            done,
+            13.0,
+            true,
+            Rgba::WHITE,
+        );
     }
 }
 
@@ -472,8 +474,36 @@ fn metric_name(kind: ResourceMetricKind) -> &'static str {
     }
 }
 
+fn is_dark(theme: &SettingsTheme) -> bool {
+    theme.text_pri.r() > 128
+}
+
+fn size_group(dialog: Rect) -> Rect {
+    Rect::from_xywh(
+        dialog.left + DIALOG_PADDING,
+        dialog.top + SIZE_GROUP_TOP,
+        dialog.width() - DIALOG_PADDING * 2.0,
+        SIZE_GROUP_HEIGHT,
+    )
+}
+
 fn resource_size_button(dialog: Rect) -> Rect {
-    Rect::from_xywh(dialog.right - 170.0, dialog.top + 77.0, 150.0, 32.0)
+    let group = size_group(dialog);
+    Rect::from_xywh(
+        group.right - 10.0 - 104.0,
+        group.center_y() - 12.0,
+        104.0,
+        24.0,
+    )
+}
+
+fn done_button(dialog: Rect) -> Rect {
+    Rect::from_xywh(
+        dialog.right - DIALOG_PADDING - 80.0,
+        dialog.bottom - DIALOG_PADDING - 28.0,
+        80.0,
+        28.0,
+    )
 }
 
 fn select_resource_size(app: &mut SettingsApp, value: &str) {
@@ -486,21 +516,248 @@ fn select_resource_size(app: &mut SettingsApp, value: &str) {
     app.resize_resource_widget(columns, rows);
 }
 
-fn draw_dropdown_arrow(painter: Painter<'_>, x: f32, y: f32, theme: &SettingsTheme) {
+fn draw_sheet(painter: Painter<'_>, dialog: Rect, theme: &SettingsTheme) {
+    for (offset, spread) in [(14.0, 6.0), (4.0, 1.0)] {
+        painter.fill_round_rect(
+            Rect::from_xywh(
+                dialog.left - spread,
+                dialog.top + offset - spread,
+                dialog.width() + spread * 2.0,
+                dialog.height() + spread * 2.0,
+            ),
+            Radius::uniform(DIALOG_RADIUS + spread),
+            settings_color(theme.shadow),
+        );
+    }
+    painter.fill_round_rect(
+        dialog,
+        Radius::uniform(DIALOG_RADIUS),
+        settings_color(theme.win_bg),
+    );
+    painter.stroke_round_rect(
+        dialog,
+        Radius::uniform(DIALOG_RADIUS),
+        1.0,
+        settings_color(theme.popup_border),
+    );
+}
+
+fn draw_group(painter: Painter<'_>, rect: Rect, theme: &SettingsTheme) {
+    painter.fill_round_rect(
+        rect,
+        Radius::uniform(GROUP_RADIUS),
+        settings_color(theme.group_bg),
+    );
+    painter.stroke_round_rect(
+        rect,
+        Radius::uniform(GROUP_RADIUS),
+        1.0,
+        settings_color(theme.group_border),
+    );
+}
+
+fn draw_raised_control(painter: Painter<'_>, rect: Rect, radius: f32, theme: &SettingsTheme) {
+    painter.fill_round_rect(
+        Rect::from_xywh(rect.left, rect.top + 0.5, rect.width(), rect.height()),
+        Radius::uniform(radius),
+        settings_color(theme.shadow),
+    );
+    painter.fill_round_rect(
+        rect,
+        Radius::uniform(radius),
+        if is_dark(theme) {
+            settings_color(theme.control_hover)
+        } else {
+            Rgba::WHITE
+        },
+    );
+    painter.stroke_round_rect(
+        rect,
+        Radius::uniform(radius),
+        0.75,
+        settings_color(theme.control_border),
+    );
+}
+
+fn draw_popup_chevrons(painter: Painter<'_>, x: f32, y: f32, theme: &SettingsTheme) {
     let color = settings_color(theme.text_sec);
+    draw_chevron(painter, x, y - 3.0, true, color);
+    draw_chevron(painter, x, y + 3.0, false, color);
+}
+
+fn draw_chevron(painter: Painter<'_>, x: f32, y: f32, up: bool, color: Rgba) {
+    let direction = if up { -1.0 } else { 1.0 };
     painter.stroke_line(
-        Point::new(x - 4.0, y - 2.0),
-        Point::new(x, y + 2.0),
-        1.5,
+        Point::new(x - 3.0, y - 1.5 * direction),
+        Point::new(x, y + 1.5 * direction),
+        1.4,
         color,
         StrokeCap::Round,
     );
     painter.stroke_line(
-        Point::new(x, y + 2.0),
-        Point::new(x + 4.0, y - 2.0),
-        1.5,
+        Point::new(x, y + 1.5 * direction),
+        Point::new(x + 3.0, y - 1.5 * direction),
+        1.4,
         color,
         StrokeCap::Round,
+    );
+}
+
+fn draw_stepper(
+    painter: Painter<'_>,
+    layout: &RowLayout,
+    can_move_up: bool,
+    can_move_down: bool,
+    theme: &SettingsTheme,
+) {
+    let body = Rect::from_xywh(
+        layout.up.left,
+        layout.up.top,
+        layout.up.width(),
+        layout.down.bottom - layout.up.top,
+    );
+    draw_raised_control(painter, body, 5.0, theme);
+    painter.fill_rect(
+        Rect::from_xywh(
+            body.left + 3.0,
+            body.center_y() - 0.25,
+            body.width() - 6.0,
+            0.5,
+        ),
+        settings_color(theme.control_border),
+    );
+    let color = |enabled: bool| {
+        settings_color(if enabled {
+            theme.text_pri
+        } else {
+            theme.disabled
+        })
+    };
+    draw_chevron(
+        painter,
+        layout.up.center_x(),
+        layout.up.center_y() + 1.0,
+        true,
+        color(can_move_up),
+    );
+    draw_chevron(
+        painter,
+        layout.down.center_x(),
+        layout.down.center_y() - 1.0,
+        false,
+        color(can_move_down),
+    );
+}
+
+fn draw_style_glyph(
+    painter: Painter<'_>,
+    rect: Rect,
+    style: ResourceMetricStyle,
+    color: Rgba,
+    theme: &SettingsTheme,
+) {
+    let track = settings_color(theme.text_pri).with_alpha(28);
+    match style {
+        ResourceMetricStyle::Bar => {
+            let bar = Rect::from_xywh(
+                rect.left + 1.0,
+                rect.center_y() - 2.0,
+                rect.width() - 2.0,
+                4.0,
+            );
+            painter.fill_round_rect(bar, Radius::uniform(2.0), track);
+            painter.fill_round_rect(
+                Rect::from_xywh(bar.left, bar.top, bar.width() * 0.62, bar.height()),
+                Radius::uniform(2.0),
+                color,
+            );
+        }
+        ResourceMetricStyle::Ring => {
+            let center = Point::new(rect.center_x(), rect.center_y());
+            let radius = rect.width() / 2.0 - 3.0;
+            painter.stroke_circle(center, radius, 3.0, track);
+            painter.stroke_arc(
+                Rect::from_xywh(
+                    center.x - radius,
+                    center.y - radius,
+                    radius * 2.0,
+                    radius * 2.0,
+                ),
+                Angle::ZERO,
+                Angle::from_degrees(0.62 * 360.0),
+                3.0,
+                color,
+                StrokeCap::Round,
+            );
+        }
+    }
+}
+
+fn draw_segmented(
+    painter: Painter<'_>,
+    layout: &RowLayout,
+    style: ResourceMetricStyle,
+    theme: &SettingsTheme,
+) {
+    painter.fill_round_rect(
+        layout.style,
+        Radius::uniform(7.0),
+        settings_color(theme.control_bg),
+    );
+    let (bar, ring) = (layout.bar_segment(), layout.ring_segment());
+    let selected = match style {
+        ResourceMetricStyle::Bar => bar,
+        ResourceMetricStyle::Ring => ring,
+    };
+    draw_raised_control(
+        painter,
+        Rect::from_xywh(
+            selected.left + 2.0,
+            selected.top + 2.0,
+            selected.width() - 4.0,
+            selected.height() - 4.0,
+        ),
+        5.5,
+        theme,
+    );
+    for (rect, key, active) in [
+        (bar, "resource_style_bar", style == ResourceMetricStyle::Bar),
+        (
+            ring,
+            "resource_style_ring",
+            style == ResourceMetricStyle::Ring,
+        ),
+    ] {
+        draw_centered_text(
+            painter,
+            &tr(key),
+            rect,
+            11.5,
+            active,
+            settings_color(if active {
+                theme.text_pri
+            } else {
+                theme.text_sec
+            }),
+        );
+    }
+}
+
+fn draw_swatch(painter: Painter<'_>, rect: Rect, color: Rgba, theme: &SettingsTheme) {
+    let center = Point::new(rect.center_x(), rect.center_y());
+    let radius = rect.width() / 2.0;
+    painter.fill_circle(center, radius, color);
+    painter.stroke_circle(
+        center,
+        radius - 0.5,
+        1.0,
+        settings_color(theme.text_pri).with_alpha(48),
+    );
+    painter.stroke_circle(
+        center,
+        radius - 2.5,
+        1.0,
+        Rgba::from_argb(70, 255, 255, 255),
     );
 }
 
@@ -526,14 +783,13 @@ fn draw_centered_text(
     text: &str,
     rect: Rect,
     size: f32,
-    selected: bool,
-    theme: &SettingsTheme,
+    bold: bool,
+    color: Rgba,
 ) {
-    let fonts = FontManager::global();
-    let width = fonts.measure_text_cached(
+    let width = FontManager::global().measure_text_cached(
         text,
         size,
-        if selected {
+        if bold {
             winisland_render::FontStyle::bold()
         } else {
             winisland_render::FontStyle::normal()
@@ -543,72 +799,37 @@ fn draw_centered_text(
         painter,
         text,
         rect.center_x() - width / 2.0,
-        rect.center_y() + 4.0,
+        rect.center_y() + size * 0.36,
         size,
-        selected,
-        settings_color(if selected {
-            theme.selection_text
-        } else {
-            theme.text_sec
-        }),
+        bold,
+        color,
     );
 }
 
-fn draw_switch(painter: Painter<'_>, x: f32, y: f32, enabled: bool, theme: &SettingsTheme) {
-    let rect = Rect::from_xywh(x, y, 38.0, 22.0);
+fn draw_switch(painter: Painter<'_>, rect: Rect, enabled: bool, theme: &SettingsTheme) {
+    let radius = rect.height() / 2.0;
     painter.fill_round_rect(
         rect,
-        Radius::uniform(11.0),
+        Radius::uniform(radius),
         settings_color(if enabled {
             theme.toggle_on
         } else {
             theme.toggle_off
         }),
     );
-    painter.fill_circle(
-        Point::new(if enabled { x + 27.0 } else { x + 11.0 }, y + 11.0),
-        8.0,
-        Rgba::WHITE,
-    );
-}
-
-fn draw_order_button(
-    painter: Painter<'_>,
-    x: f32,
-    y: f32,
-    up: bool,
-    enabled: bool,
-    theme: &SettingsTheme,
-) {
-    let rect = Rect::from_xywh(x, y, 24.0, 26.0);
-    painter.fill_round_rect(
-        rect,
-        Radius::uniform(6.0),
-        settings_color(if enabled {
-            theme.control_bg
-        } else {
-            theme.control_disabled
-        }),
-    );
-    let color = settings_color(if enabled {
-        theme.text_pri
+    let knob_x = if enabled {
+        rect.right - radius
     } else {
-        theme.disabled
-    });
-    let cy = y + 13.0;
-    let direction = if up { -1.0 } else { 1.0 };
-    painter.stroke_line(
-        Point::new(x + 8.0, cy - 3.0 * direction),
-        Point::new(x + 12.0, cy + 2.0 * direction),
-        1.6,
-        color,
-        StrokeCap::Round,
+        rect.left + radius
+    };
+    painter.fill_circle(
+        Point::new(knob_x, rect.center_y() + 0.5),
+        radius - 1.5,
+        Rgba::from_argb(40, 0, 0, 0),
     );
-    painter.stroke_line(
-        Point::new(x + 12.0, cy + 2.0 * direction),
-        Point::new(x + 16.0, cy - 3.0 * direction),
-        1.6,
-        color,
-        StrokeCap::Round,
+    painter.fill_circle(
+        Point::new(knob_x, rect.center_y()),
+        radius - 2.0,
+        Rgba::WHITE,
     );
 }

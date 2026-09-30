@@ -31,9 +31,10 @@ impl App {
         let width = compact_width
             .max(compact_overlay.width)
             .max(self.config.expanded_width * expanded_scale);
-        let height = compact_lyric_height
-            .max(compact_overlay.height)
-            .max(self.config.expanded_height * expanded_scale);
+        let height = compact_lyric_height.max(compact_overlay.height).max(
+            (self.config.expanded_height + crate::ui::expanded::pager::PAGER_EXTENT)
+                * expanded_scale,
+        );
         WindowSize::new((width + PADDING) as u32, (height + PADDING) as u32)
     }
 
@@ -225,13 +226,10 @@ impl App {
 
     fn hidden_visible_height(&self) -> f64 {
         let edge_size = self.springs.h.value as f64;
-        if self.config.hidden_width >= MAX_HIDDEN_WIDTH
-            && !(self.config.fullscreen_auto_hide && self.is_fullscreen_suppressed)
-        {
+        if self.config.hidden_width >= MAX_HIDDEN_WIDTH && !self.fullscreen_hide_active() {
             edge_size
         } else {
-            let hidden_width = if self.config.fullscreen_auto_hide && self.is_fullscreen_suppressed
-            {
+            let hidden_width = if self.fullscreen_hide_active() {
                 winisland_core::config::MIN_HIDDEN_WIDTH
             } else {
                 self.config.hidden_width
@@ -318,6 +316,7 @@ impl App {
 
         IslandLayout {
             offset_x,
+            dock_bottom,
             island_y,
             current_island_x,
             current_island_y,

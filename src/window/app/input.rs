@@ -12,7 +12,8 @@ use crate::utils::mouse::{
 use winisland_core::config::{MIN_HIDDEN_WIDTH, WidgetKind};
 use winisland_platform::InputState;
 
-use super::{App, DragAxis, IslandLayout, should_show_widget_view};
+use super::{App, DragAxis, IslandLayout};
+use crate::ui::expanded::pager::ExpandedPage;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum InputSource {
@@ -28,9 +29,7 @@ impl App {
         py: i32,
         source: InputSource,
     ) {
-        let fullscreen_suppressed = self.config.fullscreen_auto_hide
-            && self.is_fullscreen_suppressed
-            && !self.hide.overlay_reveal;
+        let fullscreen_suppressed = self.fullscreen_hide_active() && !self.hide.overlay_reveal;
         if fullscreen_suppressed || (source == InputSource::Mouse && self.is_cursor_suppressed) {
             return;
         }
@@ -106,7 +105,7 @@ impl App {
             self.springs.w.value as f64,
             self.springs.h.value as f64,
             self.springs.r.value as f64,
-        );
+        ) || self.pager_contains(rel_x, rel_y, layout);
         let is_on_hidden_reveal = self.is_hidden()
             && self.config.hidden_width <= MIN_HIDDEN_WIDTH
             && self.springs.hide.value >= 0.999
@@ -155,7 +154,7 @@ impl App {
             return;
         }
 
-        if !(self.expanded || self.config.fullscreen_auto_hide && self.is_fullscreen_suppressed)
+        if !(self.expanded || self.fullscreen_hide_active())
             && self.compact_overlay.is_notification_visible()
             && is_hovering_visible
         {
@@ -168,25 +167,25 @@ impl App {
             return;
         }
 
-        if self.config.fullscreen_auto_hide && self.is_fullscreen_suppressed {
+        if self.fullscreen_hide_active() {
             return;
         }
 
         if self.expanded {
             self.expanded_press_started_inside = true;
             self.expanded_header_press = None;
-            let music_page_available = self.music_page_available;
-            let view_val = self.springs.view.value as f64;
+            if self.handle_pager_press(rel_x, rel_y, layout) {
+                return;
+            }
             let w = self.springs.w.value as f64;
             let h = self.springs.h.value as f64;
-            let page_shift = view_val * w;
             let scale = self.config.expanded_scale as f64;
 
-            if view_val < 0.5 {
+            if self.page_focused(ExpandedPage::Music) {
                 let media = self.current_media_info().clone();
                 let music_on = !media.title.is_empty()
                     && (self.plugin_media_source.is_some() || self.config.smtc_enabled);
-                let cx = rel_x as f32 - page_shift as f32;
+                let cx = rel_x as f32 - self.page_translation(ExpandedPage::Music);
                 let cy = rel_y as f32;
                 let (cover_x, cover_y, cover_w, cover_h) =
                     get_cover_rect(offset_x as f32, island_y as f32, self.config.expanded_scale);
@@ -320,7 +319,8 @@ impl App {
                 }
             }
 
-            if view_val > 0.5 {
+            if self.page_focused(ExpandedPage::Widgets) {
+                let widget_shift = self.page_translation(ExpandedPage::Widgets) as f64;
                 let settings_hit = self
                     .config
                     .widget_layout
@@ -339,7 +339,7 @@ impl App {
                         is_point_in_continuous_rounded_rect(
                             rel_x as f64,
                             rel_y as f64,
-                            x as f64 + w - page_shift,
+                            x as f64 + widget_shift,
                             y as f64,
                             width as f64,
                             height as f64,
@@ -348,28 +348,6 @@ impl App {
                     });
                 if settings_hit {
                     self.open_settings();
-                    return;
-                }
-
-                if music_page_available {
-                    let arrow_x = offset_x + 7.5 * scale + w - page_shift;
-                    let arrow_y = island_y + h / 2.0;
-                    let adx = rel_x as f64 - arrow_x;
-                    let ady = rel_y as f64 - arrow_y;
-                    if adx * adx + ady * ady <= (12.0 * scale).powi(2) {
-                        self.widget_view = false;
-                        return;
-                    }
-                }
-            }
-
-            if music_page_available && view_val < 0.5 {
-                let arrow_x = offset_x + w - 7.5 * scale;
-                let arrow_y = island_y + h / 2.0;
-                let adx = rel_x as f64 - arrow_x;
-                let ady = rel_y as f64 - arrow_y;
-                if adx * adx + ady * ady <= (12.0 * scale).powi(2) {
-                    self.widget_view = true;
                     return;
                 }
             }
@@ -411,7 +389,7 @@ impl App {
                 && (py - start_y).abs() <= threshold
             {
                 self.expanded = false;
-                self.widget_view = false;
+                self.reset_page();
             }
             return;
         }
@@ -499,15 +477,13 @@ impl App {
     }
 
     fn expand(&mut self) {
-        let widget_view = should_show_widget_view(self.music_page_available);
         let compact_height = self.compact_content_height();
         let interrupts_collapse = self.springs.h.value - compact_height
             > 0.5 * self.config.compact_scale
             || self.springs.h.velocity.abs() > 0.001;
-        self.widget_view = widget_view;
+        self.reset_page();
         if !interrupts_collapse {
-            self.springs.view.value = f32::from(widget_view);
-            self.springs.view.velocity = 0.0;
+            self.snap_to_current_page();
         }
         self.expanded = true;
     }

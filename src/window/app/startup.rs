@@ -123,6 +123,9 @@ impl App {
                     self.open_settings();
                 }
             }
+            if let Err(error) = crate::platform::shell().register_hotkey(super::HIDE_HOTKEY) {
+                log::warn!("Hide hotkey unavailable: {error}");
+            }
             Self::enforce_overlay_window(&window_ref);
             window_ref.set_visible(true);
             window_ref.request_redraw();

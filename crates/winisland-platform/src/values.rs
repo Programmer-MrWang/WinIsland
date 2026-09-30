@@ -161,6 +161,17 @@ pub struct HostBackdropParams {
     pub width: f32,
     pub height: f32,
     pub radius: f32,
+    pub extras: [Option<BackdropShape>; 2],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BackdropShape {
+    pub screen_x: f32,
+    pub screen_y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub radius: f32,
+    pub opacity: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -244,6 +255,15 @@ pub enum TrayAction {
 pub enum TrayTheme {
     Light,
     Dark,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Hotkey {
+    pub ctrl: bool,
+    pub alt: bool,
+    pub shift: bool,
+    pub win: bool,
+    pub key: char,
 }
 
 #[derive(Clone, Debug)]
