@@ -1,3 +1,7 @@
+use crate::types::v2::{
+    CommandExecuteFnV2, CommandInfoV2, CommandSpecV2, EventSubscriptionV2, InputRegionV2,
+    IslandStateV2, MediaSessionV2, SurfaceSpecV2, TimerSpecV2,
+};
 use std::ffi::c_void;
 
 use crate::abi::{PluginStatus, TablePrefix};
@@ -239,4 +243,129 @@ pub struct LogApiV2 {
     pub prefix: TablePrefix,
     pub write:
         Option<unsafe extern "C" fn(*mut c_void, PluginToken, u32, Utf8Slice) -> PluginStatus>,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct InputApiV2 {
+    pub prefix: TablePrefix,
+    pub set_regions: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            PluginToken,
+            WidgetId,
+            *const InputRegionV2,
+            u32,
+        ) -> PluginStatus,
+    >,
+    pub release_capture:
+        Option<unsafe extern "C" fn(*mut c_void, PluginToken, WidgetId) -> PluginStatus>,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CommandApiV2 {
+    pub prefix: TablePrefix,
+    pub register: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            PluginToken,
+            *const CommandSpecV2,
+            *mut ResourceId,
+        ) -> PluginStatus,
+    >,
+    pub set_enabled:
+        Option<unsafe extern "C" fn(*mut c_void, PluginToken, ResourceId, u8) -> PluginStatus>,
+    pub list: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            PluginToken,
+            *mut CommandInfoV2,
+            u32,
+            *mut u32,
+        ) -> PluginStatus,
+    >,
+    pub execute: Option<CommandExecuteFnV2>,
+    pub release: Option<unsafe extern "C" fn(*mut c_void, PluginToken, ResourceId) -> PluginStatus>,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SurfaceApiV2 {
+    pub prefix: TablePrefix,
+    pub create: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            PluginToken,
+            *const SurfaceSpecV2,
+            *mut WidgetId,
+        ) -> PluginStatus,
+    >,
+    pub update: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            PluginToken,
+            WidgetId,
+            *const SurfaceSpecV2,
+        ) -> PluginStatus,
+    >,
+    pub release: Option<unsafe extern "C" fn(*mut c_void, PluginToken, WidgetId) -> PluginStatus>,
+    pub submit_draw_list: Option<
+        unsafe extern "C" fn(*mut c_void, PluginToken, WidgetId, *const u8, u32) -> PluginStatus,
+    >,
+    pub logical_size: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            PluginToken,
+            WidgetId,
+            *mut f32,
+            *mut f32,
+        ) -> PluginStatus,
+    >,
+    pub show_page: Option<unsafe extern "C" fn(*mut c_void, PluginToken, WidgetId) -> PluginStatus>,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct EventsApiV2 {
+    pub prefix: TablePrefix,
+    pub subscribe: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            PluginToken,
+            *const EventSubscriptionV2,
+            *mut ResourceId,
+        ) -> PluginStatus,
+    >,
+    pub create_timer: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            PluginToken,
+            *const TimerSpecV2,
+            *mut ResourceId,
+        ) -> PluginStatus,
+    >,
+    pub release: Option<unsafe extern "C" fn(*mut c_void, PluginToken, ResourceId) -> PluginStatus>,
+    pub island_state:
+        Option<unsafe extern "C" fn(*mut c_void, PluginToken, *mut IslandStateV2) -> PluginStatus>,
+    pub set_animation:
+        Option<unsafe extern "C" fn(*mut c_void, PluginToken, WidgetId, u8) -> PluginStatus>,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct MediaSessionApiV2 {
+    pub prefix: TablePrefix,
+    pub list: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            PluginToken,
+            *mut MediaSessionV2,
+            u32,
+            *mut u32,
+        ) -> PluginStatus,
+    >,
+    pub send: Option<
+        unsafe extern "C" fn(*mut c_void, PluginToken, u64, u32, u64, *mut u64) -> PluginStatus,
+    >,
 }

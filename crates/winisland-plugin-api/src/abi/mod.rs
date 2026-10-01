@@ -22,6 +22,11 @@ pub const IFACE_TEXT: u32 = 0x08;
 pub const IFACE_IMAGE: u32 = 0x09;
 pub const IFACE_STORE: u32 = 0x0a;
 pub const IFACE_LOG: u32 = 0x0b;
+pub const IFACE_INPUT: u32 = 0x0c;
+pub const IFACE_COMMAND: u32 = 0x0d;
+pub const IFACE_SURFACE: u32 = 0x0e;
+pub const IFACE_EVENTS: u32 = 0x0f;
+pub const IFACE_MEDIA_SESSION: u32 = 0x10;
 pub const IFACE_VERSION_1: u32 = 1;
 
 pub const CAP_CONTEXT: u64 = 1 << 0;
@@ -34,6 +39,11 @@ pub const CAP_SETTINGS: u64 = 1 << 6;
 pub const CAP_TEXT: u64 = 1 << 7;
 pub const CAP_IMAGE: u64 = 1 << 8;
 pub const CAP_STORE: u64 = 1 << 9;
+pub const CAP_INPUT: u64 = 1 << 10;
+pub const CAP_COMMAND: u64 = 1 << 11;
+pub const CAP_SURFACE: u64 = 1 << 12;
+pub const CAP_EVENTS: u64 = 1 << 13;
+pub const CAP_MEDIA_SESSION: u64 = 1 << 14;
 pub const KNOWN_CAPABILITIES_V2: u64 = CAP_CONTEXT
     | CAP_MEDIA
     | CAP_I18N
@@ -43,7 +53,12 @@ pub const KNOWN_CAPABILITIES_V2: u64 = CAP_CONTEXT
     | CAP_SETTINGS
     | CAP_TEXT
     | CAP_IMAGE
-    | CAP_STORE;
+    | CAP_STORE
+    | CAP_INPUT
+    | CAP_COMMAND
+    | CAP_SURFACE
+    | CAP_EVENTS
+    | CAP_MEDIA_SESSION;
 
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

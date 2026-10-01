@@ -13,7 +13,7 @@ Create a Rust `cdylib` with `winisland-plugin-api` as a dependency. Export `wini
 crate-type = ["cdylib"]
 
 [dependencies]
-winisland-plugin-api = "0.8"
+winisland-plugin-api = "0.9"
 ```
 
 The host passes a plugin token and an instance-owned `PluginHostV2` table to `create`. Query service tables through the SDK `Host` wrapper or through `PluginHostV2.query_interface`. The eleven interfaces cover context, media, translations, host state, widgets, lyrics, settings, text, images, store, and logging. Each resource belongs to the plugin token that created it.
@@ -44,7 +44,7 @@ A package is a ZIP containing `plugin.yml` and the DLL named by its `entry` fiel
 
 ```toml
 [dev-dependencies]
-winisland-plugin-api = { version = "0.8", features = ["packager"] }
+winisland-plugin-api = { version = "0.9", features = ["packager"] }
 ```
 
 ```rust,no_run

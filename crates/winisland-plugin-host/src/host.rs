@@ -32,6 +32,47 @@ pub struct PluginHost {
 }
 
 impl PluginHost {
+    pub fn surfaces(&self) -> Vec<(u64, winisland_plugin_api::SurfaceSpecV2)> {
+        let Ok(state) = self.runtime.state.lock() else {
+            return Vec::new();
+        };
+        let mut surfaces: Vec<_> = state
+            .widgets
+            .iter()
+            .filter_map(|(id, record)| {
+                (!record.disabled)
+                    .then_some(record.surface)
+                    .flatten()
+                    .filter(|spec| spec.flags & winisland_plugin_api::SURFACE_ENABLED != 0)
+                    .map(|spec| (*id, spec))
+            })
+            .collect();
+        surfaces.sort_by_key(|(id, spec)| (spec.order, *id));
+        surfaces
+    }
+
+    pub fn drawable_ids(&self) -> Vec<u64> {
+        self.runtime
+            .state
+            .lock()
+            .map(|state| {
+                state
+                    .widgets
+                    .iter()
+                    .filter_map(|(id, r)| (!r.disabled).then_some(*id))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn present(&self, presentation: crate::extensions::Presentation) {
+        let _ = self.set_widget_logical_size(
+            presentation.target,
+            presentation.logical[0],
+            presentation.logical[1],
+        );
+        self.runtime.extensions.present(presentation);
+    }
     pub fn new(plugin_dir: PathBuf, host_build: u32) -> Result<Self, PluginHostError> {
         std::fs::create_dir_all(&plugin_dir)
             .map_err(|error| PluginHostError::Io(format!("{}: {error}", plugin_dir.display())))?;
@@ -62,6 +103,15 @@ impl PluginHost {
         self.entries.borrow().is_empty()
     }
 
+    pub fn capability_tokens(&self, capability: u64) -> Vec<winisland_plugin_api::PluginToken> {
+        self.entries
+            .borrow()
+            .iter()
+            .filter(|entry| entry.library().capabilities() & capability != 0)
+            .map(|entry| entry.token())
+            .collect()
+    }
+
     pub fn widgets_snapshot(&self) -> Vec<PluginWidget> {
         let entries = self.entries.borrow();
         let Ok(state) = self.runtime.state.lock() else {
@@ -78,7 +128,7 @@ impl PluginHost {
                 let Some(record) = state.widgets.get(&id) else {
                     continue;
                 };
-                if record.disabled {
+                if record.disabled || record.surface.is_some() {
                     continue;
                 }
                 let key = fixed_text(&record.spec.key);

@@ -18,6 +18,8 @@ impl App {
             self.config.base_width,
             Some(MAX_LYRIC_WIDTH),
         ) * compact_scale;
+        let plugin_widths = crate::ui::plugin::compact_widths(self.plugin_host.as_deref());
+        let compact_width = compact_width + (plugin_widths.0 + plugin_widths.1) * compact_scale;
         let compact_overlay = crate::ui::compact::CompactOverlay::maximum_size(
             self.config.base_width,
             self.config.base_height,

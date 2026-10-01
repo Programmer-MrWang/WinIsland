@@ -18,6 +18,9 @@ impl App {
         if let Some(win) = self.window
             && win.id() == id
         {
+            if self.route_plugin_input(&event) {
+                return;
+            }
             match event {
                 PlatformEvent::CloseRequested { .. } => {
                     log::info!("Main window close requested, exiting application");
@@ -392,10 +395,13 @@ impl App {
                                             expanded_scale: self.config.expanded_scale,
                                             hide_progress: self.springs.hide.value
                                                 * island_layout.content_hide_ratio,
-                                            compact_widget_opacity:
+                                            compact_widget_opacity: if compact_components_hidden {
+                                                0.0
+                                            } else {
                                                 crate::ui::widget::compact::hide_opacity(
                                                     self.springs.hide.value,
-                                                ),
+                                                )
+                                            },
                                             island_x: island_layout.current_island_x as f32,
                                             island_y: island_layout.current_island_y as f32,
                                             stable_island_y: island_layout.stable_island_y as f32,
@@ -552,6 +558,10 @@ impl AppHandler for App {
     }
 
     fn on_exit(&mut self) {
+        let _ = crate::platform::shell().set_plugin_commands(&[]);
+        if let Some(host) = &self.plugin_host {
+            host.runtime().extensions.clear_presentations();
+        }
         self.close_settings();
         if let Some(window_ref) = self.window.take() {
             window().release_host_backdrop(window_ref.id());
@@ -577,6 +587,9 @@ fn event_window_id(event: &PlatformEvent) -> Option<WindowId> {
         | PlatformEvent::MouseInput { id, .. }
         | PlatformEvent::MouseWheel { id, .. }
         | PlatformEvent::KeyInput { id, .. }
+        | PlatformEvent::ModifiersChanged { id, .. }
+        | PlatformEvent::ImeCommit { id, .. }
+        | PlatformEvent::ImeComposition { id, .. }
         | PlatformEvent::Touch { id, .. }
         | PlatformEvent::DroppedFile { id, .. } => Some(*id),
         _ => None,

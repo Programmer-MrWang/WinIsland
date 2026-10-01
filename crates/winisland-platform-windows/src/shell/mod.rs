@@ -8,6 +8,7 @@ mod links;
 mod locale;
 mod lunar;
 mod paths;
+pub(crate) mod plugin_commands;
 mod tray;
 mod update;
 
@@ -27,6 +28,19 @@ use winisland_platform::{
 pub struct WindowsShell;
 
 impl ShellIntegration for WindowsShell {
+    fn set_plugin_commands(
+        &self,
+        commands: &[winisland_platform::PluginCommand],
+    ) -> Vec<(u64, PlatformError)> {
+        let mut errors = plugin_commands::update(commands);
+        if let Err(error) = tray::set_plugin_commands(commands) {
+            errors.push((0, error));
+        }
+        errors
+    }
+    fn poll_plugin_commands(&self) -> Vec<u64> {
+        plugin_commands::poll()
+    }
     fn config_dir(&self) -> PathBuf {
         paths::config_dir()
     }

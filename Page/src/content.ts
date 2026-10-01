@@ -15,6 +15,11 @@ export type DocKey =
   | 'plugin-dev/api/i18n'
   | 'plugin-dev/api/host-state'
   | 'plugin-dev/api/widget'
+  | 'plugin-dev/api/surface'
+  | 'plugin-dev/api/input'
+  | 'plugin-dev/api/events'
+  | 'plugin-dev/api/command'
+  | 'plugin-dev/api/media-session'
   | 'plugin-dev/api/lyrics-transform'
   | 'plugin-dev/api/settings'
   | 'plugin-dev/api/text'
@@ -40,6 +45,11 @@ export const DOC_KEYS: DocKey[] = [
   'plugin-dev/api/i18n',
   'plugin-dev/api/host-state',
   'plugin-dev/api/widget',
+  'plugin-dev/api/surface',
+  'plugin-dev/api/input',
+  'plugin-dev/api/events',
+  'plugin-dev/api/command',
+  'plugin-dev/api/media-session',
   'plugin-dev/api/lyrics-transform',
   'plugin-dev/api/settings',
   'plugin-dev/api/text',
@@ -158,6 +168,11 @@ export const copy = {
         'plugin-dev/api/i18n': 'I18n API',
         'plugin-dev/api/host-state': 'Host State API',
         'plugin-dev/api/widget': 'Widget API',
+        'plugin-dev/api/surface': 'Surface API',
+        'plugin-dev/api/input': 'Input API',
+        'plugin-dev/api/events': 'Events API',
+        'plugin-dev/api/command': 'Command API',
+        'plugin-dev/api/media-session': 'Media Session API',
         'plugin-dev/api/lyrics-transform': 'Lyrics Transform API',
         'plugin-dev/api/settings': 'Settings API',
         'plugin-dev/api/text': 'Text API',
@@ -275,6 +290,11 @@ export const copy = {
         'plugin-dev/api/i18n': 'I18n API',
         'plugin-dev/api/host-state': 'Host State API',
         'plugin-dev/api/widget': 'Widget API',
+        'plugin-dev/api/surface': 'Surface API',
+        'plugin-dev/api/input': 'Input API',
+        'plugin-dev/api/events': 'Events API',
+        'plugin-dev/api/command': 'Command API',
+        'plugin-dev/api/media-session': 'Media Session API',
         'plugin-dev/api/lyrics-transform': 'Lyrics Transform API',
         'plugin-dev/api/settings': 'Settings API',
         'plugin-dev/api/text': 'Text API',

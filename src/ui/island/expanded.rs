@@ -87,6 +87,25 @@ pub(super) fn draw_expanded_content(params: ExpandedContentParams<'_>) -> bool {
             painter.save();
             painter.translate(Vec2::new(distance * current_w, 0.0));
             match page {
+                ExpandedPage::Plugin(id) => {
+                    if let Some(host) = plugin_host {
+                        crate::ui::plugin::draw(
+                            painter,
+                            host,
+                            plugin_frames,
+                            crate::ui::plugin::SurfaceFrame {
+                                id: *id,
+                                rect: winisland_render::Rect::from_xywh(
+                                    offset_x, offset_y, current_w, current_h,
+                                ),
+                                logical: [expanded_width, expanded_height],
+                                input_offset: distance * current_w,
+                                alpha,
+                                interactive: distance.abs() < 0.01 && expansion_progress > 0.99,
+                            },
+                        );
+                    }
+                }
                 ExpandedPage::Music => draw_music_page(DrawMusicPageParams {
                     painter,
                     ox: offset_x,
@@ -123,6 +142,8 @@ pub(super) fn draw_expanded_content(params: ExpandedContentParams<'_>) -> bool {
                         plugin_frames,
                         plugin_host,
                         text_color,
+                        distance * current_w,
+                        distance.abs() < 0.01 && expansion_progress > 0.99,
                     );
                 }
                 ExpandedPage::Timer => crate::ui::expanded::timer_view::draw_timer_page(

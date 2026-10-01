@@ -1,4 +1,5 @@
 pub mod context;
+pub mod extensions;
 pub mod host_state;
 pub mod i18n;
 pub mod image;

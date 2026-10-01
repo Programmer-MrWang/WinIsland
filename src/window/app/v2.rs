@@ -91,11 +91,8 @@ impl App {
             Self::show_toast("Plugin disabled", &error);
         }
         let widgets = host.widgets_snapshot();
-        let current_ids = widgets
-            .iter()
-            .map(|widget| widget.id)
-            .collect::<HashSet<_>>();
-        let mut changed = false;
+        let current_ids = host.drawable_ids().into_iter().collect::<HashSet<_>>();
+        let mut changed = current_ids != self.v2_widget_ids;
         for id in self.v2_widget_ids.difference(&current_ids) {
             changed |= self.widget_mgr.remove_widget(*id);
             self.plugin_frames.remove(id);

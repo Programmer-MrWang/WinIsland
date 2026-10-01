@@ -16,28 +16,51 @@ pub enum PlatformEvent {
     /// Loop resumed; windows may be created during this callback.
     Resumed,
     /// Close was requested for a live window; it remains owned until explicitly destroyed.
-    CloseRequested { id: WindowId },
+    CloseRequested {
+        id: WindowId,
+    },
     /// A window was destroyed; its ID may no longer resolve.
-    Destroyed { id: WindowId },
+    Destroyed {
+        id: WindowId,
+    },
     /// Inner size changed in physical pixels; zero is valid while minimized.
-    Resized { id: WindowId, size: WindowSize },
+    Resized {
+        id: WindowId,
+        size: WindowSize,
+    },
     /// Outer position changed in physical screen pixels.
     Moved {
         id: WindowId,
         position: WindowPosition,
     },
     /// Scale changed; request a replacement inner size before this callback ends.
-    ScaleFactorChanged { id: WindowId, scale: f64 },
+    ScaleFactorChanged {
+        id: WindowId,
+        scale: f64,
+    },
     /// A known light or dark system theme was reported for this window.
-    ThemeChanged { id: WindowId, theme: Theme },
+    ThemeChanged {
+        id: WindowId,
+        theme: Theme,
+    },
     /// A live window requested rendering; the callback may schedule another redraw.
-    RedrawRequested { id: WindowId },
+    RedrawRequested {
+        id: WindowId,
+    },
     /// Focus state changed for this window.
-    Focused { id: WindowId, focused: bool },
+    Focused {
+        id: WindowId,
+        focused: bool,
+    },
     /// Pointer moved within the window in local physical pixels.
-    CursorMoved { id: WindowId, position: WindowPoint },
+    CursorMoved {
+        id: WindowId,
+        position: WindowPoint,
+    },
     /// Pointer left the window; no position is available.
-    CursorLeft { id: WindowId },
+    CursorLeft {
+        id: WindowId,
+    },
     /// Button changed; position is global physical pixels or zero if unavailable.
     MouseInput {
         id: WindowId,
@@ -55,6 +78,21 @@ pub enum PlatformEvent {
         id: WindowId,
         key: Key,
         state: InputState,
+        text: Option<String>,
+        repeat: bool,
+    },
+    ModifiersChanged {
+        id: WindowId,
+        modifiers: u32,
+    },
+    ImeCommit {
+        id: WindowId,
+        text: String,
+    },
+    ImeComposition {
+        id: WindowId,
+        text: String,
+        cursor: Option<(usize, usize)>,
     },
     /// Contact changed at a local physical pixel position; ID lasts for that contact.
     Touch {
@@ -64,7 +102,10 @@ pub enum PlatformEvent {
         position: WindowPoint,
     },
     /// A file was dropped; the owned path remains valid after delivery.
-    DroppedFile { id: WindowId, path: PathBuf },
+    DroppedFile {
+        id: WindowId,
+        path: PathBuf,
+    },
     /// Desktop composition changed; consumers may recreate rendering resources now.
     CompositionChanged,
     /// A deduplicated external wake was delivered; the pending flag is already cleared.

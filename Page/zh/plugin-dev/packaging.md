@@ -6,11 +6,11 @@
 
 ## 使用 `PluginPackager` 构建
 
-为构建工具启用 `packager` 功能。在支持 ABI v2 的库发布到注册表之前，使用当前仓库源码；包版本为 `0.8.0`。
+为构建工具启用已发布的 `winisland-plugin-api 0.9` 的 `packager` 功能。插件运行依赖与打包工具应使用同一 API 版本；清单中的 `abi-version` 仍为 `2`。
 
 ```toml
 [dev-dependencies]
-winisland-plugin-api = { git = "https://github.com/WinIslandProject/WinIsland", features = ["packager"] }
+winisland-plugin-api = { version = "0.9", features = ["packager"] }
 
 [[example]]
 name = "pack"

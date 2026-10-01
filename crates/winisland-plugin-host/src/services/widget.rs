@@ -1,7 +1,7 @@
 use std::ffi::c_void;
 use std::sync::Arc;
 
-use winisland_plugin_api::abi::{CAP_WIDGET, PluginStatus};
+use winisland_plugin_api::abi::{CAP_SURFACE, CAP_WIDGET, PluginStatus};
 use winisland_plugin_api::draw::v2::MAX_LIST_BYTES;
 use winisland_plugin_api::types::v2::widget::{WIDGET_FLAG_SHOW_COMPACT, WidgetSpecV2};
 use winisland_plugin_api::types::v2::{PluginToken, WidgetId};
@@ -36,7 +36,7 @@ pub unsafe extern "C" fn create(
         Ok(value) => value,
         Err(status) => return status,
     };
-    if let Err(status) = host.registry.require(token, CAP_WIDGET) {
+    if let Err(status) = host.registry.require(token, CAP_WIDGET | CAP_SURFACE) {
         return status;
     }
     if !valid_spec(&spec) {
@@ -53,6 +53,7 @@ pub unsafe extern "C" fn create(
     state.widgets.insert(
         id,
         WidgetRecord {
+            surface: None,
             spec,
             draw_list: Arc::from([]),
             logical_width: spec.min_width.max(spec.span_cols as f32 * 60.0),
@@ -64,6 +65,8 @@ pub unsafe extern "C" fn create(
     );
     // SAFETY: The caller supplied a writable WidgetId output pointer.
     unsafe { *out = WidgetId::from_raw(id) };
+    drop(state);
+    host.extensions.changed();
     PluginStatus::Ok
 }
 
@@ -80,7 +83,7 @@ pub unsafe extern "C" fn update(
         Ok(value) => value,
         Err(status) => return status,
     };
-    if let Err(status) = host.registry.require(token, CAP_WIDGET) {
+    if let Err(status) = host.registry.require(token, CAP_WIDGET | CAP_SURFACE) {
         return status;
     }
     if !valid_spec(&spec) {
@@ -103,6 +106,8 @@ pub unsafe extern "C" fn update(
     }
     record.spec = spec;
     record.redraw = true;
+    drop(state);
+    host.extensions.changed();
     PluginStatus::Ok
 }
 
@@ -116,7 +121,7 @@ pub unsafe extern "C" fn release(
         Ok(host) => host,
         Err(status) => return status,
     };
-    if let Err(status) = host.registry.require(token, CAP_WIDGET) {
+    if let Err(status) = host.registry.require(token, CAP_WIDGET | CAP_SURFACE) {
         return status;
     }
     let Ok(mut state) = host.state.lock() else {
@@ -129,6 +134,8 @@ pub unsafe extern "C" fn release(
         return status;
     }
     state.widgets.remove(&id.get());
+    drop(state);
+    host.extensions.remove_target(id.get());
     PluginStatus::Ok
 }
 
@@ -150,7 +157,7 @@ pub unsafe extern "C" fn submit_draw_list(
         Ok(host) => host,
         Err(status) => return status,
     };
-    if let Err(status) = host.registry.require(token, CAP_WIDGET) {
+    if let Err(status) = host.registry.require(token, CAP_WIDGET | CAP_SURFACE) {
         return status;
     }
     if let Err(status) = host
@@ -170,8 +177,16 @@ pub unsafe extern "C" fn submit_draw_list(
     if record.disabled {
         return PluginStatus::StaleHandle;
     }
+    if let Err(status) = host
+        .resources
+        .resize(token, ResourceKind::Widget, id.get(), len as usize)
+    {
+        return status;
+    }
     record.draw_list = Arc::from(bytes);
     record.redraw = true;
+    drop(state);
+    host.extensions.changed();
     PluginStatus::Ok
 }
 
@@ -185,7 +200,7 @@ pub unsafe extern "C" fn request_redraw(
         Ok(host) => host,
         Err(status) => return status,
     };
-    if let Err(status) = host.registry.require(token, CAP_WIDGET) {
+    if let Err(status) = host.registry.require(token, CAP_WIDGET | CAP_SURFACE) {
         return status;
     }
     if let Err(status) = host
@@ -204,6 +219,8 @@ pub unsafe extern "C" fn request_redraw(
         return PluginStatus::StaleHandle;
     }
     record.redraw = true;
+    drop(state);
+    host.extensions.changed();
     PluginStatus::Ok
 }
 
@@ -222,7 +239,7 @@ pub unsafe extern "C" fn logical_size(
         Ok(host) => host,
         Err(status) => return status,
     };
-    if let Err(status) = host.registry.require(token, CAP_WIDGET) {
+    if let Err(status) = host.registry.require(token, CAP_WIDGET | CAP_SURFACE) {
         return status;
     }
     if let Err(status) = host

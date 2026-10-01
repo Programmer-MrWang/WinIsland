@@ -51,6 +51,8 @@ pub fn draw_widget_page(
     plugin_frames: &HashMap<u64, PreparedFrame>,
     plugin_host: Option<&PluginHost>,
     text_color: Rgba,
+    input_offset: f32,
+    interactive: bool,
 ) -> bool {
     let mut animating = false;
 
@@ -104,11 +106,14 @@ pub fn draw_widget_page(
                 occupied[cell] = true;
             }
             let (slot_x, slot_y, tile_w, tile_h) = layout.footprint_rect_span(anchor, span);
-            if let Some(host) = plugin_host
-                && plugin_frames.contains_key(&widget.id)
-            {
+            if let Some(host) = plugin_host {
                 let (_, _, logical_w, logical_h) = logical_layout.footprint_rect_span(anchor, span);
-                let _ = host.set_widget_logical_size(widget.id, logical_w, logical_h);
+                host.present(winisland_plugin_host::extensions::Presentation {
+                    target: widget.id,
+                    bounds: [slot_x + input_offset, slot_y, tile_w, tile_h],
+                    logical: [logical_w, logical_h],
+                    interactive,
+                });
             }
             if let Some(frame) = plugin_frames.get(&widget.id) {
                 draw_prepared_widget(

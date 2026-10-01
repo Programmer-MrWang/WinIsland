@@ -22,17 +22,20 @@ struct LyricsWorker {
     id: String,
     token: PluginToken,
     sender: Sender<WorkerEvent>,
+    thread: std::thread::Thread,
 }
 
 impl LyricsBridge {
     pub(crate) fn attach(&self, instance: &PluginInstance) {
-        if let Some(sender) = &instance.event_tx
+        if let Some(thread) = &instance.worker
+            && let Some(sender) = &instance.event_tx
             && let Ok(mut workers) = self.workers.lock()
         {
             workers.push(LyricsWorker {
                 id: instance.library().metadata().id.clone(),
                 token: instance.token(),
                 sender: sender.clone(),
+                thread: thread.thread().clone(),
             });
         }
     }
@@ -75,6 +78,7 @@ impl LyricsBridge {
                     .send(event)
                     .map_err(|_| PluginStatus::Internal)
                     .and_then(|_| {
+                        worker.thread.unpark();
                         receive
                             .recv_timeout(Duration::from_secs(2))
                             .map_err(|_| PluginStatus::Internal)?

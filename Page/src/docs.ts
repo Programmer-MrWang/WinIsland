@@ -14,6 +14,11 @@ import pluginApiMediaEn from '../plugin-dev/api/media.md?raw'
 import pluginApiI18nEn from '../plugin-dev/api/i18n.md?raw'
 import pluginApiHostStateEn from '../plugin-dev/api/host-state.md?raw'
 import pluginApiWidgetEn from '../plugin-dev/api/widget.md?raw'
+import pluginApiSurfaceEn from '../plugin-dev/api/surface.md?raw'
+import pluginApiInputEn from '../plugin-dev/api/input.md?raw'
+import pluginApiEventsEn from '../plugin-dev/api/events.md?raw'
+import pluginApiCommandEn from '../plugin-dev/api/command.md?raw'
+import pluginApiMediaSessionEn from '../plugin-dev/api/media-session.md?raw'
 import pluginApiLyricsEn from '../plugin-dev/api/lyrics-transform.md?raw'
 import pluginApiSettingsEn from '../plugin-dev/api/settings.md?raw'
 import pluginApiTextEn from '../plugin-dev/api/text.md?raw'
@@ -36,6 +41,11 @@ import pluginApiMediaZh from '../zh/plugin-dev/api/media.md?raw'
 import pluginApiI18nZh from '../zh/plugin-dev/api/i18n.md?raw'
 import pluginApiHostStateZh from '../zh/plugin-dev/api/host-state.md?raw'
 import pluginApiWidgetZh from '../zh/plugin-dev/api/widget.md?raw'
+import pluginApiSurfaceZh from '../zh/plugin-dev/api/surface.md?raw'
+import pluginApiInputZh from '../zh/plugin-dev/api/input.md?raw'
+import pluginApiEventsZh from '../zh/plugin-dev/api/events.md?raw'
+import pluginApiCommandZh from '../zh/plugin-dev/api/command.md?raw'
+import pluginApiMediaSessionZh from '../zh/plugin-dev/api/media-session.md?raw'
 import pluginApiLyricsZh from '../zh/plugin-dev/api/lyrics-transform.md?raw'
 import pluginApiSettingsZh from '../zh/plugin-dev/api/settings.md?raw'
 import pluginApiTextZh from '../zh/plugin-dev/api/text.md?raw'
@@ -61,6 +71,11 @@ export const docs = {
     'plugin-dev/api/i18n': pluginApiI18nEn,
     'plugin-dev/api/host-state': pluginApiHostStateEn,
     'plugin-dev/api/widget': pluginApiWidgetEn,
+    'plugin-dev/api/surface': pluginApiSurfaceEn,
+    'plugin-dev/api/input': pluginApiInputEn,
+    'plugin-dev/api/events': pluginApiEventsEn,
+    'plugin-dev/api/command': pluginApiCommandEn,
+    'plugin-dev/api/media-session': pluginApiMediaSessionEn,
     'plugin-dev/api/lyrics-transform': pluginApiLyricsEn,
     'plugin-dev/api/settings': pluginApiSettingsEn,
     'plugin-dev/api/text': pluginApiTextEn,
@@ -86,6 +101,11 @@ export const docs = {
     'plugin-dev/api/i18n': pluginApiI18nZh,
     'plugin-dev/api/host-state': pluginApiHostStateZh,
     'plugin-dev/api/widget': pluginApiWidgetZh,
+    'plugin-dev/api/surface': pluginApiSurfaceZh,
+    'plugin-dev/api/input': pluginApiInputZh,
+    'plugin-dev/api/events': pluginApiEventsZh,
+    'plugin-dev/api/command': pluginApiCommandZh,
+    'plugin-dev/api/media-session': pluginApiMediaSessionZh,
     'plugin-dev/api/lyrics-transform': pluginApiLyricsZh,
     'plugin-dev/api/settings': pluginApiSettingsZh,
     'plugin-dev/api/text': pluginApiTextZh,

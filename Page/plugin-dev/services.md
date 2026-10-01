@@ -1,6 +1,6 @@
 # Host services
 
-ABI v2 exposes eleven versioned service tables through `PluginHostV2.query`. This page is a tour; the [API reference](/plugin-dev/api) documents each table's methods and data contract. The SDK `Host` wrapper covers common operations; the raw tables in `winisland_plugin_api::abi` expose every function. Each raw table starts with `TablePrefix` and currently uses `IFACE_VERSION_1`. Validate required function slots before calling them. Except for Log, declare the matching `CAP_*` bit in `PluginDescriptorV2`.
+ABI v2 exposes sixteen versioned service tables through `PluginHostV2.query`. This page is a tour; the [API reference](/plugin-dev/api) documents each table's methods and data contract. The SDK `Host` wrapper covers common operations; the raw tables in `winisland_plugin_api::abi` expose every function. Each raw table starts with `TablePrefix` and currently uses `IFACE_VERSION_1`. Validate required function slots before calling them. Except for Log, declare the matching `CAP_*` bit in `PluginDescriptorV2`.
 
 Think of a service as an entry point into one part of WinIsland. A capability bit says your plugin needs it; querying the table gives you its functions; calling `create` or `register` gives you an owned resource. Keep the returned SDK object or raw ID for as long as the content should exist.
 
@@ -11,6 +11,11 @@ Think of a service as an entry point into one part of WinIsland. A capability bi
 | `CAP_I18N` | `I18nApiV2` | `host.i18n()?` (query only) | Register and release translation bundles |
 | `CAP_HOST_STATE` | `HostStateApiV2` | `host.host_state()?` | Read or subscribe to media/theme state |
 | `CAP_WIDGET` | `WidgetApiV2` | `host.widgets()?` | Create, update, release, draw, and size widgets |
+| `CAP_SURFACE` | `SurfaceApiV2` | `host.surfaces()?` | Expanded pages, compact content, and island layers |
+| `CAP_INPUT` | `InputApiV2` | `host.input()?` | Pointer, keyboard, IME, and file-drop regions |
+| `CAP_EVENTS` | `EventsApiV2` | `host.events()?` | Subscriptions, timers, island state, and animation scheduling |
+| `CAP_COMMAND` | `CommandApiV2` | `host.commands()?` | Commands, tray entries, and global hotkeys |
+| `CAP_MEDIA_SESSION` | `MediaSessionApiV2` | `host.media_sessions()?` | Discover, select, and control existing media sessions |
 | `CAP_LYRICS` | `LyricsTransformApiV2` | `host.lyrics()?` | Register/release a lyric transformer |
 | `CAP_SETTINGS` | `SettingsApiV2` | `host.settings()?` | Create/update/release a settings page |
 | `CAP_TEXT` | `TextApiV2` | `host.text()?` | Measure text and query font family |
@@ -32,6 +37,14 @@ Build a complete list with `DrawListBuilder::new(Size::new(width, height))`, add
 
 The draw list is limited to 4 MiB, 4096 commands, and 64 KiB of text per command. `Widget::request_redraw` is best effort. `PluginDescriptorV2.on_tick` receives `WidgetId` and elapsed seconds on a plugin worker.
 
+## Interactive surfaces and scheduling
+
+[Surface](/plugin-dev/api/surface) adds expanded pages, compact left/right content, and background/foreground layers. It reuses the validated drawing protocol and shares widget resource quotas. [Input](/plugin-dev/api/input) assigns logical hit regions to a surface or grid widget; [Events](/plugin-dev/api/events) delivers pointer, keyboard, IME, and dropped-file callbacks on the plugin worker.
+
+Events also provides visibility/resize notifications, island state, timers, and per-target animation control. Disable continuous animation for static content and submit only when needed. Keep subscription and timer handles in the instance, cancel them before releasing their targets, and avoid capturing the owning instance strongly in its own callbacks.
+
+[Command](/plugin-dev/api/command) registers named actions with optional tray entries and global hotkeys. [Media Session](/plugin-dev/api/media-session) enumerates native and plugin media, selects sources, and sends playback requests. Subscribe to `EVENT_RESULT` before sending requests; immediate success confirms queuing, and the later event reports the operation status.
+
 ## Lyrics, i18n, and Host State
 
 A lyric transformer runs after lyrics are parsed. It uses a size query and then a write pass. Preserve the same Unicode character count on word-synchronised lines to keep timing boundaries. The SDK `host.lyrics()?.register` accepts a `Send + Sync` transformation closure and retains its callback storage while registered.
@@ -50,4 +63,4 @@ For a setting such as “show seconds,” read its Store value during `create`, 
 
 ## Resource limits and errors
 
-Current per-plugin resource limits are 64 Contexts, 4 Media sources (32 MiB total), 16 i18n bundles (4 MiB), 8 Widgets (4 MiB), 4 lyric transformers, 1 Settings page (2 MiB), 64 Images (64 MiB), and 16 Host State subscriptions. The host rejects stale or foreign handles and quota overflows using `PluginStatus`. Releases should occur before successful shutdown; the host revokes remaining resources afterward.
+Current per-plugin resource limits are 64 Contexts, 4 Media sources (32 MiB total), 16 i18n bundles (4 MiB), 8 Widgets and Surfaces combined (4 MiB), 4 lyric transformers, 1 Settings page (2 MiB), 64 Images (64 MiB), 16 Host State subscriptions, 128 Events subscriptions/timers combined, and 64 Commands. The host rejects stale or foreign handles and quota overflows using `PluginStatus`. Releases should occur before successful shutdown; the host revokes remaining resources afterward.

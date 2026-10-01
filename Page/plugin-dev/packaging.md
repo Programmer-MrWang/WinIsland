@@ -6,11 +6,11 @@ Use a root-level DLL only for a quick local run. Use a ZIP when you want to shar
 
 ## Build with PluginPackager
 
-Enable the packager feature for a small build tool. Use the current repository source until the ABI v2 crate is available from the registry; the package version is `0.8.0`.
+Enable the `packager` feature of the published `winisland-plugin-api 0.9` crate. Use the same API version for the plugin and its build tool; the manifest still uses `abi-version: 2`.
 
 ```toml
 [dev-dependencies]
-winisland-plugin-api = { git = "https://github.com/WinIslandProject/WinIsland", features = ["packager"] }
+winisland-plugin-api = { version = "0.9", features = ["packager"] }
 
 [[example]]
 name = "pack"

@@ -47,6 +47,8 @@ pub unsafe extern "C" fn winisland_plugin_entry_v2() -> *const PluginDescriptorV
 
 宿主在插件工作线程调用可选的 `PluginDescriptorV2.on_tick(handle, widget_id, dt_seconds)`，不会在渲染线程调用它。小组件通过 `WidgetApiV2.submit_draw_list` 提交绘制字节；宿主校验并重放完整列表。媒体命令、宿主状态通知、设置变更和歌词转换也由宿主调度；回调数据要保留到安全释放为止。歌词转换先查询输出长度再写入，两次结果必须一致。
 
+0.9 的 [Events API](/plugin-dev/api/events) 新增工作线程上的输入、状态、可见性、尺寸、定时器和结果回调；[Command](/plugin-dev/api/command) 回调也使用该工作线程。应保留每个 `CallbackResource`，避免在工作线程上阻塞等待另一个回调，并在释放目标前先取消订阅和定时器。宿主会在 `shutdown` 前停止并等待自己的工作线程。Surface 的 tick 取决于是否呈现及其动画开关；按事件更新的内容可以关闭 tick 而不停止订阅。
+
 `shutdown` 返回 `Ok` 前须停止插件自己的全部线程，并等待其结束，完成回调活动并释放资源。它应支持重试。`destroy` 在 `shutdown` 成功后调用一次，释放不透明实例；之后才卸载 DLL。`shutdown` 失败时，宿主将 DLL 和服务表保留到进程退出。插件错误地声称线程已结束，宿主无法识别。
 
 发布构建使用 `panic = "abort"`。插件 C 回调中的 panic 可能立即终止进程。下次启动时，WinIsland 检查活动插件标记，禁用对应插件并显示恢复提示；首次崩溃无法在原进程内恢复。

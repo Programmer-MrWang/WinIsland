@@ -27,6 +27,9 @@ const LYRIC_TRANSITION_LEAD_MS: u64 = (1000.0 / (60.0 * LYRIC_TRANSITION_STEP as
 
 impl App {
     fn input_pressed(&self) -> bool {
+        if self.plugin_ui.pressed_buttons & (1 << 1) != 0 || self.plugin_ui.touch_id.is_some() {
+            return false;
+        }
         self.touch_id.is_some()
             || (self
                 .last_touch_at
@@ -34,6 +37,10 @@ impl App {
                 && is_left_button_pressed())
     }
     pub(super) fn on_about_to_wait(&mut self) {
+        if !is_left_button_pressed() {
+            self.plugin_ui.pressed_buttons &= !(1 << 1);
+        }
+        self.update_plugin_services();
         let window = match self.window {
             Some(w) => w,
             None => return,
@@ -163,6 +170,11 @@ impl App {
             log::info!("Island revealed by fullscreen edge double-click");
         }
 
+        let plugin_input = self
+            .plugin_host
+            .as_ref()
+            .map(|host| host.runtime().extensions.input_state())
+            .unwrap_or_default();
         if interaction_suppressed {
             window.set_cursor_hittest(false);
         } else {
@@ -170,13 +182,14 @@ impl App {
                 is_hovering_visible
                     || is_on_hidden_reveal
                     || self.compact_overlay.is_volume_dragging()
-                    || self.compact_overlay.is_brightness_dragging(),
+                    || self.compact_overlay.is_brightness_dragging()
+                    || plugin_input.captured,
             );
         }
 
         let compact_overlay_visible = self.update_compact_and_auto_hide(
             &window,
-            is_hovering_visible,
+            is_hovering_visible || plugin_input.captured || plugin_input.keyboard,
             music_active,
             media_is_playing,
         );
@@ -883,6 +896,16 @@ impl App {
             ) * scale
         } else {
             lyric_target_w
+        };
+        let plugin_widths = crate::ui::plugin::compact_widths(self.plugin_host.as_deref());
+        let compact_widget_target_w = if compact_components_visible
+            && preserve_compact_widget_width
+            && !self.compact_overlay.is_visible()
+        {
+            compact_widget_target_w
+                + (plugin_widths.0 + plugin_widths.1) * self.config.compact_scale
+        } else {
+            compact_widget_target_w
         };
         let compact_content_h = self.compact_content_height();
         let default_target_h = if self.expanded {

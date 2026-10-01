@@ -1,6 +1,7 @@
 mod abi;
 
 pub mod draw;
+pub mod extensions;
 pub mod fault;
 pub mod host;
 pub mod lifecycle;

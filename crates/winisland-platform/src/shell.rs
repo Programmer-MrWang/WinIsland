@@ -5,6 +5,8 @@ use crate::{Hotkey, LocalDateTime, LunarDate, PlatformError, TrayAction, TrayLab
 /// Shell services are synchronous. Call blocking operations away from rendering;
 /// returned guards own their resources, errors never panic, and methods are not reentrant.
 pub trait ShellIntegration {
+    fn set_plugin_commands(&self, commands: &[crate::PluginCommand]) -> Vec<(u64, PlatformError)>;
+    fn poll_plugin_commands(&self) -> Vec<u64>;
     /// Returns the configuration directory, using a fallback if OS lookup fails.
     fn config_dir(&self) -> PathBuf;
     /// Returns the data directory, using a fallback if OS lookup fails.

@@ -10,6 +10,8 @@ pub enum ThumbnailError {
 
 /// Session handle for media and thumbnail workers. Calls may block and must stay off render.
 pub trait MediaSessionHandle: Send + Sync {
+    fn identity(&self) -> u64;
+    fn controls(&self) -> crate::MediaCapabilities;
     /// Returns the source ID, or `None` if the session has gone away.
     fn source_app_id(&self) -> Option<String>;
     /// Classifies music sessions; false on missing metadata.

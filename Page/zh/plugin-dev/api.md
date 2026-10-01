@@ -1,6 +1,6 @@
 # 插件 API 参考
 
-ABI v2 提供十一张宿主服务表。先按要做的事选择 API，再进对应页面看方法、输入、资源归属和限制。如果还没成功加载过插件，请先做[快速开始](/plugin-dev/quickstart)；只有 `create` 收到宿主和令牌后才能使用这些服务。
+ABI v2 提供十六张宿主服务表。先按要做的事选择 API，再进对应页面看方法、输入、资源归属和限制。如果还没成功加载过插件，请先做[快速开始](/plugin-dev/quickstart)；只有 `create` 收到宿主和令牌后才能使用这些服务。
 
 每个服务调用都需要传入表中的 `prefix.context` 和宿主签发的 `PluginToken`，并返回 `PluginStatus`。创建的资源归该令牌所有。原始调用通过 `PluginHostV2.query(context, IFACE_*, IFACE_VERSION_1)` 获取服务表，检查表的大小、版本和所需函数槽。SDK 的 `Host` 封装会为便捷方法执行这些检查。
 
@@ -11,6 +11,11 @@ ABI v2 提供十一张宿主服务表。先按要做的事选择 API，再进对
 | [I18n API](/plugin-dev/api/i18n) | 插件翻译资源 |
 | [Host State API](/plugin-dev/api/host-state) | 媒体与主题状态及变化通知 |
 | [Widget API](/plugin-dev/api/widget) | 网格小组件和经校验的绘制列表 |
+| [Surface API](/plugin-dev/api/surface) | 独立展开页、紧凑内容和岛内绘制层 |
+| [Input API](/plugin-dev/api/input) | 指针、键盘、输入法和文件拖入区域 |
+| [Events API](/plugin-dev/api/events) | 事件订阅、定时器、岛状态和动画调度 |
+| [Command API](/plugin-dev/api/command) | 命令、托盘入口和全局快捷键 |
+| [Media Session API](/plugin-dev/api/media-session) | 发现、选择和控制现有媒体会话 |
 | [Lyrics Transform API](/plugin-dev/api/lyrics-transform) | 已解析歌词的逐行转换 |
 | [Settings API](/plugin-dev/api/settings) | 声明式插件设置页 |
 | [Text API](/plugin-dev/api/text) | 文字测量和宿主字体族 |
@@ -23,6 +28,8 @@ ABI v2 提供十一张宿主服务表。先按要做的事选择 API，再进对
 - **自己画“正在播放”小组件：**从 [Host State](/plugin-dev/api/host-state) 读取曲目信息，用 [Image](/plugin-dev/api/image) 取封面，必要时用 [Text](/plugin-dev/api/text) 测量标题，再通过 [Widget](/plugin-dev/api/widget) 绘制。小组件不会自动拿到歌曲或图片，绘制命令要由插件提交。
 - **重启后还记得的设置：**用 [Settings](/plugin-dev/api/settings) 添加控件，用户确认修改后用 [Store](/plugin-dev/api/store) 保存，再在创建设置页时读回。Settings 管界面，Store 管保存。
 - **带控制按钮的媒体源：**通过 [Media](/plugin-dev/api/media) 发布曲目，并声明按钮、提供 `on_command` 回调。SDK 的简易 `create_source` 只发布基本信息，不提供控制按钮。
+
+0.9 新增 Surface、Input、Events、Command 和 Media Session，顶层 ABI 版本不变；支持旧宿主前先阅读[兼容性说明](/plugin-dev)。交互页需要保留 Surface、设置 Input 区域、通过 Events 订阅，再在数据变化时提交绘制帧。控制已有播放器应使用 Media Session，不必为此发布新的 Media 源。
 
 ## 通用 ABI 规则
 

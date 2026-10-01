@@ -2,6 +2,8 @@
 
 `MediaApiV2` 让插件提供自己的“正在播放”媒体源。声明 `CAP_MEDIA` 并查询 `IFACE_MEDIA`。SDK `host.media()?.create_source(title, artist)` 创建没有控制按钮的基础媒体源；进度、封面、播放状态和控制回调使用原始服务表。
 
+若要发现或控制现有播放器，而不是发布自己的媒体源，请使用 [Media Session API](/plugin-dev/api/media-session)；它也能枚举并选择在这里创建的插件媒体源。
+
 ## 一个常见用法
 
 以网络电台为例：用 `create` 发布电台和当前曲目，曲目或进度变化时调用 `update`。如果要显示播放/暂停或跳转按钮，还要提供 `on_command`，并由插件控制自己的播放器。宿主负责展示按钮，不会替插件操作播放器。电台停播或插件关闭时释放媒体源。

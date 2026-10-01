@@ -18,7 +18,7 @@ cargo new --lib hello-winisland-plugin
 cd hello-winisland-plugin
 ```
 
-使用以下 `Cargo.toml`。在支持 ABI v2 的库发布到注册表前，先使用此处的仓库源码；发布后可改用匹配的 `winisland-plugin-api = "0.8"` 版本。
+使用以下 `Cargo.toml`，直接依赖已发布的 `winisland-plugin-api = "0.9"`。需要使用新增扩展能力时，宿主也必须包含 0.9 对应的接口实现；仅升级插件依赖不会升级宿主。
 
 ```toml
 [package]
@@ -34,7 +34,7 @@ name = "hello_winisland_plugin"
 crate-type = ["cdylib"]
 
 [dependencies]
-winisland-plugin-api = { git = "https://github.com/WinIslandProject/WinIsland" }
+winisland-plugin-api = "0.9"
 ```
 
 包 ID、名称、版本、作者和描述必须与描述符、安装包清单一致。`repository` 中的网址会成为 `github-link`。

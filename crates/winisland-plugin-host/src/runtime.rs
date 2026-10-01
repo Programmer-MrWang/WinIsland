@@ -23,6 +23,7 @@ use crate::registry::Registry;
 use crate::resources::ResourceTable;
 
 pub struct HostRuntime {
+    pub extensions: crate::extensions::Extensions,
     pub registry: Registry,
     pub resources: ResourceTable,
     pub(crate) tables: AbiTables,
@@ -37,6 +38,7 @@ pub(crate) struct ServiceState {
     pub context_revision: u64,
     pub media: HashMap<u64, MediaRecord>,
     pub media_revision: u64,
+    pub selected_media: Option<u64>,
     pub translations: HashMap<u64, TranslationBundle>,
     pub lyrics: HashMap<u64, LyricsRecord>,
     pub settings: HashMap<u64, SettingsRecord>,
@@ -55,6 +57,7 @@ pub(crate) struct ContextRecord {
 }
 
 pub(crate) struct WidgetRecord {
+    pub surface: Option<winisland_plugin_api::SurfaceSpecV2>,
     pub spec: WidgetSpecV2,
     pub draw_list: Arc<[u8]>,
     pub logical_width: f32,
@@ -129,6 +132,7 @@ unsafe impl Sync for HostRuntime {}
 impl HostRuntime {
     pub fn new(host_build: u32, store_root: PathBuf) -> Pin<Box<Self>> {
         let mut runtime = Box::pin(Self {
+            extensions: crate::extensions::Extensions::default(),
             registry: Registry::new(),
             resources: ResourceTable::new(),
             tables: AbiTables::new(host_build),
@@ -137,6 +141,7 @@ impl HostRuntime {
                 context_revision: 0,
                 media: HashMap::new(),
                 media_revision: 0,
+                selected_media: None,
                 translations: HashMap::new(),
                 lyrics: HashMap::new(),
                 settings: HashMap::new(),
@@ -223,8 +228,10 @@ impl HostRuntime {
 
     pub fn widget_ids(&self, token: PluginToken) -> Result<Vec<WidgetId>, PluginStatus> {
         use crate::resources::ResourceKind;
-        self.registry
-            .require(token, winisland_plugin_api::abi::CAP_WIDGET)?;
+        self.registry.require(
+            token,
+            winisland_plugin_api::abi::CAP_WIDGET | winisland_plugin_api::abi::CAP_SURFACE,
+        )?;
         self.resources.list(token, ResourceKind::Widget).map(|ids| {
             ids.into_iter()
                 .map(|id| unsafe { WidgetId::from_raw(id) })
@@ -339,17 +346,22 @@ impl HostRuntime {
     pub fn revoke_plugin(&self, token: PluginToken) -> Result<usize, PluginStatus> {
         use crate::resources::ResourceKind;
         self.registry.begin_shutdown(token)?;
+        self.extensions.revoke(token);
         let mut state = self.state.lock().map_err(|_| PluginStatus::Internal)?;
         let revoked = self.resources.revoke_plugin(token)?;
         let mut translations = Vec::new();
         for (id, kind) in &revoked {
             match kind {
+                ResourceKind::Event | ResourceKind::Command => {}
                 ResourceKind::Context => {
                     if state.contexts.remove(id).is_some() {
                         state.context_revision = state.context_revision.wrapping_add(1);
                     }
                 }
                 ResourceKind::Media => {
+                    if state.selected_media == Some(*id) {
+                        state.selected_media = None;
+                    }
                     if state.media.remove(id).is_some() {
                         state.media_revision = state.media_revision.wrapping_add(1);
                     }
@@ -360,6 +372,7 @@ impl HostRuntime {
                 }
                 ResourceKind::Widget => {
                     state.widgets.remove(id);
+                    self.extensions.remove_target(*id);
                 }
                 ResourceKind::Lyrics => {
                     state.lyrics.remove(id);

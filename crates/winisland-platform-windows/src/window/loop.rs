@@ -44,6 +44,9 @@ pub(super) fn run(handler: &mut dyn AppHandler) -> Result<(), PlatformError> {
         if !message.is_null() {
             // SAFETY: winit supplies a valid MSG pointer for this synchronous callback.
             let message = unsafe { &*message.cast::<MSG>() };
+            if message.message == windows::Win32::UI::WindowsAndMessaging::WM_HOTKEY {
+                crate::shell::plugin_commands::pressed(message.wParam.0);
+            }
             if message.message == WM_DWMCOMPOSITIONCHANGED {
                 COMPOSITION_CHANGED.store(true, Ordering::Release);
                 wake();
@@ -261,11 +264,31 @@ fn platform_event(id: WinitWindowId, event: WindowEvent) -> Option<PlatformEvent
                 WinitKey::Named(NamedKey::Escape) => Key::Escape,
                 WinitKey::Named(NamedKey::ArrowLeft) => Key::ArrowLeft,
                 WinitKey::Named(NamedKey::ArrowRight) => Key::ArrowRight,
+                WinitKey::Named(NamedKey::ArrowUp) => Key::ArrowUp,
+                WinitKey::Named(NamedKey::ArrowDown) => Key::ArrowDown,
+                WinitKey::Named(NamedKey::Tab) => Key::Tab,
+                WinitKey::Named(NamedKey::Delete) => Key::Delete,
                 WinitKey::Character(value) => Key::Character(value.to_string()),
                 _ => Key::Other,
             },
             state: input_state(event.state),
+            text: event.text.map(|text| text.to_string()),
+            repeat: event.repeat,
         },
+        WindowEvent::ModifiersChanged(modifiers) => {
+            let state = modifiers.state();
+            PlatformEvent::ModifiersChanged {
+                id,
+                modifiers: u32::from(state.control_key())
+                    | (u32::from(state.alt_key()) << 1)
+                    | (u32::from(state.shift_key()) << 2)
+                    | (u32::from(state.super_key()) << 3),
+            }
+        }
+        WindowEvent::Ime(winit::event::Ime::Commit(text)) => PlatformEvent::ImeCommit { id, text },
+        WindowEvent::Ime(winit::event::Ime::Preedit(text, cursor)) => {
+            PlatformEvent::ImeComposition { id, text, cursor }
+        }
         WindowEvent::Touch(touch) => PlatformEvent::Touch {
             id,
             touch_id: touch.id,
