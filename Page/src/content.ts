@@ -51,8 +51,6 @@ export const DOC_KEYS: DocKey[] = [
   'changelog',
 ]
 
-export const DOC_NAV_KEYS = DOC_KEYS.filter((key) => !key.startsWith('plugin-dev/api/'))
-
 export const localePath = (locale: Locale, path = '/') => {
   const cleanPath = path.startsWith('/') ? path : `/${path}`
   if (locale === 'zh') return cleanPath === '/' ? '/zh' : `/zh${cleanPath}`
