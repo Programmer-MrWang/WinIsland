@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   build-and-release:
@@ -92,3 +93,9 @@ jobs:
         make_latest: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Refresh website download
+      shell: bash
+      run: gh workflow run rust.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" -f docs_only=true
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
