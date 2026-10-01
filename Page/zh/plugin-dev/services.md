@@ -1,6 +1,6 @@
 # 宿主服务
 
-ABI v2 通过 `PluginHostV2.query` 提供十一张带版本号的服务表。本页为概览；[API 参考](/plugin-dev/api)逐页列出各服务表的方法和数据约定。SDK 的 `Host` 封装常见操作；`winisland_plugin_api::abi` 中的原始服务表提供全部函数。每张表都以 `TablePrefix` 开头，当前表版本为 `IFACE_VERSION_1`。调用前检查所需函数槽。除日志服务外，需在 `PluginDescriptorV2` 声明对应 `CAP_*` 能力。
+ABI v2 通过 `PluginHostV2.query` 提供十六张带版本号的服务表。本页为概览；[API 参考](/plugin-dev/api)逐页列出各服务表的方法和数据约定。SDK 的 `Host` 封装常见操作；`winisland_plugin_api::abi` 中的原始服务表提供全部函数。每张表都以 `TablePrefix` 开头，当前表版本为 `IFACE_VERSION_1`。调用前检查所需函数槽。除日志服务外，需在 `PluginDescriptorV2` 声明对应 `CAP_*` 能力。
 
 可以把服务理解为 WinIsland 的一个功能入口：能力位表示“我要用它”，查询服务表拿到函数，调用 `create` 或 `register` 后拿到自己负责释放的资源。内容还需要显示时，就保留 SDK 对象或原始 ID。
 
@@ -11,6 +11,11 @@ ABI v2 通过 `PluginHostV2.query` 提供十一张带版本号的服务表。本
 | `CAP_I18N` | `I18nApiV2` | `host.i18n()?`（仅查询） | 注册/释放翻译资源 |
 | `CAP_HOST_STATE` | `HostStateApiV2` | `host.host_state()?` | 获取/订阅媒体与主题状态 |
 | `CAP_WIDGET` | `WidgetApiV2` | `host.widgets()?` | 创建、更新、释放、绘制和测量小组件 |
+| `CAP_SURFACE` | `SurfaceApiV2` | `host.surfaces()?` | 独立展开页、紧凑内容和岛内绘制层 |
+| `CAP_INPUT` | `InputApiV2` | `host.input()?` | 指针、键盘、输入法和文件拖入区域 |
+| `CAP_EVENTS` | `EventsApiV2` | `host.events()?` | 事件订阅、定时器、岛状态和动画调度 |
+| `CAP_COMMAND` | `CommandApiV2` | `host.commands()?` | 命令、托盘入口和全局快捷键 |
+| `CAP_MEDIA_SESSION` | `MediaSessionApiV2` | `host.media_sessions()?` | 发现、选择和控制现有媒体会话 |
 | `CAP_LYRICS` | `LyricsTransformApiV2` | `host.lyrics()?` | 注册/释放歌词转换器 |
 | `CAP_SETTINGS` | `SettingsApiV2` | `host.settings()?` | 创建、更新、释放设置页 |
 | `CAP_TEXT` | `TextApiV2` | `host.text()?` | 测量文字、获取字体族 |
@@ -32,6 +37,14 @@ ABI v2 通过 `PluginHostV2.query` 提供十一张带版本号的服务表。本
 
 绘制列表最多 4 MiB、4096 条命令；单条命令的文字最多 64 KiB。`Widget::request_redraw` 只尽力请求重绘，不保证成功。`PluginDescriptorV2.on_tick` 在插件工作线程收到 `WidgetId` 和经过的秒数。
 
+## 可交互内容与调度
+
+[Surface](/plugin-dev/api/surface) 添加独立展开页、紧凑岛左右内容和背景/前景层，复用经校验的绘制协议，并与小组件共享资源配额。[Input](/plugin-dev/api/input) 为 surface 或网格小组件分配逻辑命中区域；[Events](/plugin-dev/api/events) 在插件工作线程交付指针、键盘、输入法和文件拖入回调。
+
+Events 还提供可见性/尺寸通知、岛状态、定时器和按目标开关动画。静态内容应关闭连续动画，只在需要时提交。把订阅和定时器句柄保存在实例中，释放目标前先取消；避免让实例自己的回调再强引用实例而形成循环。
+
+[Command](/plugin-dev/api/command) 注册命名操作，可附带托盘入口和全局快捷键。[Media Session](/plugin-dev/api/media-session) 枚举原生及插件媒体，选择来源并发送播放请求。发送请求前先订阅 `EVENT_RESULT`；同步成功表示已入队，之后的事件才报告操作状态。
+
 ## 歌词、翻译与宿主状态
 
 歌词转换器在歌词解析后运行，先查询输出长度，再写入。逐词同步行应保留相同的 Unicode 字符数，才能保持时间边界。SDK `host.lyrics()?.register` 接受 `Send + Sync` 转换闭包，并在注册期间保存回调数据。
@@ -50,4 +63,4 @@ ABI v2 通过 `PluginHostV2.query` 提供十一张带版本号的服务表。本
 
 ## 资源限制与错误
 
-当前每个插件的限制为：64 条活动状态文字、4 个媒体源（合计 32 MiB）、16 个翻译资源（4 MiB）、8 个小组件（4 MiB）、4 个歌词转换器、1 个设置页（2 MiB）、64 张图片（64 MiB）、16 个宿主状态订阅。宿主通过 `PluginStatus` 拒绝过期、属于其他插件的句柄和超额资源。`shutdown` 返回成功前应主动释放资源；宿主之后会撤销剩余资源。
+当前每个插件的限制为：64 条活动状态文字、4 个媒体源（合计 32 MiB）、16 个翻译资源（4 MiB）、小组件与 surface 合计 8 个（4 MiB）、4 个歌词转换器、1 个设置页（2 MiB）、64 张图片（64 MiB）、16 个宿主状态订阅、Events 订阅与定时器合计 128 个、64 个命令。宿主通过 `PluginStatus` 拒绝过期、属于其他插件的句柄和超额资源。`shutdown` 返回成功前应主动释放资源；宿主之后会撤销剩余资源。

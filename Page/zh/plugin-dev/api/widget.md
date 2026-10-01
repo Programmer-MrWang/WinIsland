@@ -40,7 +40,7 @@ if width > 0.0 && height > 0.0 {
 
 用 `DrawListBuilder::new(Size::new(width, height))` 新建完整列表，加入绘制命令，再提交 `finish()`。协议支持裁剪、变换、透明度、形状、渐变、描边、阴影、图片和文字。布局前读取 `logical_size`；SDK 查询失败时返回 `(0, 0)`。即使灵动岛正在收起，逻辑尺寸仍由展开网格确定。
 
-提交成功只代表宿主复制了字节；宿主稍后校验、准备，并在网格区域内裁剪重放。单份列表最多 4 MiB、4096 条命令；反复提交错误帧可能禁用小组件。每个插件当前最多有 8 个小组件。`PluginDescriptorV2.on_tick` 在插件工作线程运行，可用于生成新帧。当前 Widget API 没有鼠标或键盘事件回调。
+提交成功只代表宿主复制了字节；宿主稍后校验、准备，并在网格区域内裁剪重放。单份列表最多 4 MiB、4096 条命令；反复提交错误帧可能禁用小组件。每插件的小组件与 surface 共享 8 个资源、4 MiB 已存储绘制列表的配额。`PluginDescriptorV2.on_tick` 在插件工作线程运行，可用于生成新帧。需要交互时，在 `CAP_WIDGET` 之外声明 `CAP_INPUT | CAP_EVENTS`，通过 [Input](/plugin-dev/api/input) 设置逻辑区域，再用 [Events](/plugin-dev/api/events) 针对此小组件订阅 `EVENT_INPUT`。`set_animation(widget.id(), false)` 可以关闭连续 tick 而保留订阅。独立页面、紧凑区域或绘制层应使用 [Surface](/plugin-dev/api/surface)。
 
 参见[小组件示例](https://github.com/WinIslandProject/WinIsland/blob/master/crates/winisland-plugin-api/examples/minimal_widget.rs)和[绘制协议](https://github.com/WinIslandProject/WinIsland/blob/master/crates/winisland-plugin-api/src/draw/v2.rs)。
 

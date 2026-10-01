@@ -2,6 +2,8 @@
 
 `MediaApiV2` lets a plugin supply its own now-playing source. Declare `CAP_MEDIA` and query `IFACE_MEDIA`. The SDK `host.media()?.create_source(title, artist)` creates a basic source without controls; use the raw table for timeline, cover bytes, playback state, and control callbacks.
 
+To discover or control an existing player instead of publishing your own source, use [Media Session API](/plugin-dev/api/media-session). It can also enumerate and select plugin sources created here.
+
 ## A typical use
 
 For an internet radio plugin, publish the station and current track with `create`, then call `update` when the track or playback position changes. If you advertise a play/pause or seek button, provide `on_command` and handle that action in your player. The host shows the button; it does not operate your player for you. Release the source when the stream stops or the plugin shuts down.
