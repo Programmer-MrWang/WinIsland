@@ -1,7 +1,5 @@
 use std::time::{Duration, Instant};
 
-use winisland_platform::WindowPosition;
-
 use crate::platform::WindowRef;
 use crate::ui::compact::CompactOverlayState;
 use crate::ui::expanded::music_view::{
@@ -58,9 +56,11 @@ impl App {
             .is_some_and(|restore_after| now >= restore_after)
         {
             self.geom.position_restore_after = None;
-            self.geom.win_x = self.geom.configured_x;
-            self.geom.win_y = self.geom.configured_y;
-            window.set_outer_position(WindowPosition::new(self.geom.win_x, self.geom.win_y));
+            self.set_configured_window_position(
+                &window,
+                self.geom.configured_x,
+                self.geom.configured_y,
+            );
         }
         if self.topmost_check.due(now) {
             Self::enforce_overlay_window(&window);
@@ -577,22 +577,11 @@ impl App {
             }
             window.request_redraw();
         }
-        let has_widgets = !self.components_hidden
-            && (self
-                .config
-                .compact_widget_layout
-                .iter()
-                .any(|entry| entry.widget.is_some())
-                || matches!(
-                    self.ctx_mgr.current_mini(),
-                    Some(winisland_core::context::MiniContent::Plugin(_))
-                ));
         let is_idle = (!is_hovering_visible || self.components_hidden)
             && !self.expanded
             && !self.is_dragging
             && !compact_overlay_visible
-            && (self.components_hidden || !music_active || is_paused_idle)
-            && !has_widgets;
+            && (self.components_hidden || !music_active || is_paused_idle);
         if !self.config.auto_hide {
             let was_auto_hidden = self.hide.auto;
             self.hide.auto = false;

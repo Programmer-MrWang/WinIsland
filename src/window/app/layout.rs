@@ -76,6 +76,11 @@ impl App {
         self.geom.configured_x = position_x;
         self.geom.configured_y = position_y;
         self.geom.win_x = position_x;
+        if self.hide.origin.is_some() {
+            self.hide.origin = Some((position_x, position_y));
+            self.snap_to_top_edge(window);
+            return;
+        }
         self.geom.win_y = position_y;
         window.set_outer_position(WindowPosition::new(position_x, position_y));
     }
@@ -207,14 +212,13 @@ impl App {
         let Some(monitor) = Self::get_target_monitor(window, self.config.monitor_index) else {
             return;
         };
-        let layout = self.compute_island_layout();
         let mon_pos = monitor.position();
-        self.geom.win_y = mon_pos.y + TOP_OFFSET - layout.island_y.round() as i32;
+        self.geom.win_y = mon_pos.y;
         window.set_outer_position(WindowPosition::new(self.geom.win_x, self.geom.win_y));
     }
 
     pub(super) fn restore_hide_origin(&mut self, window: &WindowRef) {
-        if self.springs.hide.value > 0.001 {
+        if self.hide.has_hidden_reason() || self.springs.hide.value > 0.001 {
             return;
         }
         if let Some((win_x, win_y)) = self.hide.origin.take() {
@@ -269,7 +273,7 @@ impl App {
             DockPosition::TopCenter
         };
         let dock_bottom = dock_position.is_bottom();
-        let island_y = if dock_bottom {
+        let island_y = if dock_bottom && self.hide.origin.is_none() {
             self.geom.os_h as f64 - TOP_OFFSET as f64 - self.springs.h.value as f64
         } else {
             TOP_OFFSET as f64
@@ -303,7 +307,7 @@ impl App {
             .compact_content_height()
             .min(self.springs.h.value)
             .max(0.0) as f64;
-        let stable_base_y = if dock_bottom {
+        let stable_base_y = if dock_bottom && self.hide.origin.is_none() {
             self.geom.os_h as f64 - TOP_OFFSET as f64 - compact_content_h
         } else {
             TOP_OFFSET as f64

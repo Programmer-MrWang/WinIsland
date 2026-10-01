@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use windows::Win32::Foundation::HWND;
+use windows::Win32::UI::Input::Touch::{RegisterTouchWindow, TWF_WANTPALM};
 use winisland_platform::{
     AppHandler, CursorKind, DisplayProvider, HitRegion, HostBackdropParams, MonitorId, MonitorInfo,
     NativeSurface, OverlaySpec, OverlayStyles, PlatformError, SettingsSpec, Theme, WindowId,
@@ -68,6 +70,12 @@ fn create_window(
 }
 
 fn register_window(window: Arc<Window>, backdrop: Option<Arc<Window>>) -> WindowId {
+    if let Some(hwnd) = window_hwnd(&window) {
+        // SAFETY: The live window was created on this event-loop thread and owns hwnd.
+        if let Err(error) = unsafe { RegisterTouchWindow(HWND(hwnd as *mut _), TWF_WANTPALM) } {
+            log::warn!("Touch input registration failed: {error}");
+        }
+    }
     let id = WindowId(u64::from(window.id()));
     let record = WindowRecord {
         host_backdrop: None,

@@ -246,8 +246,8 @@ pub(crate) const COMPACT_METRIC_GAP: f32 = 4.0;
 
 pub(crate) fn compact_metric_width(style: ResourceMetricStyle) -> f32 {
     match style {
-        ResourceMetricStyle::Bar => 66.0,
-        ResourceMetricStyle::Ring => 50.0,
+        ResourceMetricStyle::Bar => 44.0,
+        ResourceMetricStyle::Ring => 38.0,
     }
 }
 

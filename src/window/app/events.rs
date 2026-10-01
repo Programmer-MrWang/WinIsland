@@ -62,11 +62,7 @@ impl App {
                     {
                         let (x, y) =
                             self.compute_window_position(monitor.position(), monitor.size());
-                        self.geom.configured_x = x;
-                        self.geom.configured_y = y;
-                        self.geom.win_x = x;
-                        self.geom.win_y = y;
-                        win.set_outer_position(WindowPosition::new(x, y));
+                        self.set_configured_window_position(&win, x, y);
                     }
                 }
                 PlatformEvent::Moved { position, .. } => {

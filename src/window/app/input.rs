@@ -494,6 +494,9 @@ impl App {
     }
 
     fn expand(&mut self) {
+        if self.hide.has_hidden_reason() {
+            self.reveal_island();
+        }
         let compact_height = self.compact_content_height();
         let interrupts_collapse = self.springs.h.value - compact_height
             > 0.5 * self.config.compact_scale

@@ -72,7 +72,7 @@ fn draw_bar(
     let width = (rect.width() - inset * 2.0).max(0.0);
     let baseline = rect.center_y() + scale;
     let label_size = (6.5 * scale).min(rect.width() * 0.22).max(4.5);
-    let value_size = (8.5 * scale).min(rect.width() * 0.28).max(5.5);
+    let mut value_size = (8.5 * scale).min(rect.width() * 0.28).max(5.5);
     let track_h = (2.0 * scale).max(1.5);
     let track = Rect::from_xywh(left, baseline + 4.5 * scale, width, track_h);
     painter.fill_round_rect(
@@ -89,6 +89,17 @@ fn draw_bar(
         );
     }
     let fonts = FontManager::global();
+    let label_w = fonts.measure_text_cached(
+        config.kind.label(),
+        label_size,
+        winisland_render::FontStyle::bold(),
+    );
+    let available_value_width = (width - label_w - 3.0 * scale).max(f32::EPSILON);
+    let natural_value_width =
+        fonts.measure_text_cached(usage.text, value_size, winisland_render::FontStyle::bold());
+    if natural_value_width > available_value_width {
+        value_size *= available_value_width / natural_value_width;
+    }
     fonts.draw_text_cached(DrawTextCachedParams {
         painter,
         text: config.kind.label(),

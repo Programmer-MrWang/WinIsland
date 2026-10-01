@@ -10,9 +10,8 @@ use windows::Win32::Graphics::Gdi::{
     MonitorFromWindow,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CURSOR_SHOWING, CURSORINFO, FindWindowW, GetClassNameW, GetCursorInfo, GetCursorPos,
-    GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId, IsIconic, SW_RESTORE,
-    SetForegroundWindow, ShowWindow,
+    CURSORINFO, FindWindowW, GetClassNameW, GetCursorInfo, GetCursorPos, GetForegroundWindow,
+    GetWindowRect, GetWindowThreadProcessId, IsIconic, SW_RESTORE, SetForegroundWindow, ShowWindow,
 };
 use windows::core::{BOOL, HSTRING};
 use winisland_platform::{
@@ -70,7 +69,7 @@ impl DisplayProvider for WindowsDisplay {
             ..Default::default()
         };
         // SAFETY: info declares its size and is writable for the duration of the call.
-        unsafe { GetCursorInfo(&mut info) }.is_ok() && (info.flags.0 & CURSOR_SHOWING.0) == 0
+        unsafe { GetCursorInfo(&mut info) }.is_ok() && info.flags.0 == 0
     }
 
     fn start_brightness_feed(
