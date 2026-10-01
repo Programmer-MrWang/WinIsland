@@ -48,6 +48,10 @@ pub trait ShellIntegration {
     fn tray_update(&self, theme: TrayTheme, labels: TrayLabels) -> Result<(), PlatformError>;
     /// Drains pending tray actions; empty means no action.
     fn poll_tray_events(&self) -> Vec<TrayAction>;
+    /// Returns a counter that changes whenever the clipboard contents change.
+    fn clipboard_sequence(&self) -> u32;
+    /// Reads up to `max_chars` of clipboard text; `None` when no text is available.
+    fn clipboard_text(&self, max_chars: usize) -> Option<String>;
     /// Registers a system-wide hotkey, or returns an unavailable/backend error.
     fn register_hotkey(&self, hotkey: Hotkey) -> Result<(), PlatformError>;
     /// Drains presses of the registered hotkey; zero means no press.

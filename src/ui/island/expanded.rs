@@ -125,6 +125,16 @@ pub(super) fn draw_expanded_content(params: ExpandedContentParams<'_>) -> bool {
                         text_color,
                     );
                 }
+                ExpandedPage::Timer => crate::ui::expanded::timer_view::draw_timer_page(
+                    painter,
+                    offset_x,
+                    offset_y,
+                    current_w,
+                    current_h,
+                    alpha,
+                    global_scale,
+                    text_color,
+                ),
                 ExpandedPage::Calendar => draw_calendar_page(
                     painter,
                     offset_x,

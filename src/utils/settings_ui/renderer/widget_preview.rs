@@ -488,6 +488,7 @@ pub(super) fn draw_widget_preview(params: WidgetPreviewParams<'_>) {
     match params.widget_editor_mode {
         WidgetEditorMode::Expanded => draw_expanded_widget_preview(params),
         WidgetEditorMode::Compact => draw_compact_widget_preview(params),
+        WidgetEditorMode::Pages => {}
     }
 }
 

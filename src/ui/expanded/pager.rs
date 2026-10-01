@@ -18,32 +18,27 @@ const ENTER_OFFSET: f32 = 6.0;
 const INACTIVE_DOT_ALPHA: f32 = 0.42;
 pub const PAGER_EXTENT: f32 = GAP + CLOSE_SIZE + SHADOW_SIGMA * 3.0;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum ExpandedPage {
-    Music,
-    Widgets,
-    Calendar,
-}
+pub use winisland_core::config::ExpandedPageKind as ExpandedPage;
 
 pub struct PageAvailability {
     pub music: bool,
 }
 
-impl ExpandedPage {
-    pub const ALL: [Self; 3] = [Self::Music, Self::Widgets, Self::Calendar];
-
-    pub fn is_available(self, availability: &PageAvailability) -> bool {
-        match self {
-            Self::Music => availability.music,
-            Self::Widgets | Self::Calendar => true,
-        }
+fn is_available(page: ExpandedPage, availability: &PageAvailability) -> bool {
+    match page {
+        ExpandedPage::Music => availability.music,
+        ExpandedPage::Widgets | ExpandedPage::Calendar | ExpandedPage::Timer => true,
     }
 }
 
-pub fn available_pages(availability: &PageAvailability) -> Vec<ExpandedPage> {
-    ExpandedPage::ALL
-        .into_iter()
-        .filter(|page| page.is_available(availability))
+pub fn available_pages(
+    order: &[ExpandedPage],
+    availability: &PageAvailability,
+) -> Vec<ExpandedPage> {
+    order
+        .iter()
+        .copied()
+        .filter(|page| is_available(*page, availability))
         .collect()
 }
 

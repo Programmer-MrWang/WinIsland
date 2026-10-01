@@ -463,9 +463,14 @@ impl App {
                     let old_position_x_offset = self.config.position_x_offset;
                     let old_position_y_offset = self.config.position_y_offset;
                     let old_monitor_index = self.config.monitor_index;
+                    let page_order_changed =
+                        self.config.expanded_page_order != current_config.expanded_page_order;
 
                     log::info!("Config changed, reloaded");
                     self.config = current_config;
+                    if page_order_changed {
+                        self.snap_to_current_page();
+                    }
                     crate::ui::widget::resource_usage::set_configs(
                         &self.config.resource_metrics,
                         &self.config.compact_resource_metrics,

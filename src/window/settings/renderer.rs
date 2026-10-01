@@ -233,6 +233,7 @@ impl SettingsApp {
                 );
             }
 
+            self.draw_page_order_list(painter, &theme);
             if self.active_page == PLUGINS_PAGE_INDEX {
                 self.draw_plugins_page(drawing_context, painter, &theme, win_w, win_h);
             }
@@ -509,6 +510,7 @@ impl SettingsApp {
         for (mode, label) in [
             (WidgetEditorMode::Expanded, tr("widget_mode_expanded")),
             (WidgetEditorMode::Compact, tr("widget_mode_compact")),
+            (WidgetEditorMode::Pages, tr("widget_mode_pages")),
         ] {
             let rect = self.widget_mode_segment_rect(mode);
             let hovered = self.focused

@@ -63,6 +63,7 @@ impl SettingsApp {
             AppConfigField::BrightnessOverlayEnabled,
             caps.brightness_control,
         );
+        page.setting(&self.config, AppConfigField::ClipboardLinkPrompt, true);
         if !caps.autostart || !caps.toast_events || !caps.input_hooks || !caps.brightness_control {
             page.row_label(tr("platform_unavailable"));
         }

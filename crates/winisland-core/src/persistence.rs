@@ -6,7 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::{
     AppConfig, MAX_HIDDEN_WIDTH, MIN_HIDDEN_WIDTH, WIDGET_GRID_SLOTS, ensure_settings_widget,
-    migrate, normalize_compact_widget_layout, normalize_resource_metrics, set_resource_widget_span,
+    migrate, normalize_compact_widget_layout, normalize_expanded_page_order,
+    normalize_resource_metrics, set_resource_widget_span,
 };
 
 static NEXT_CONFIG_WRITE_ID: AtomicU64 = AtomicU64::new(1);
@@ -153,6 +154,9 @@ pub fn load_config_at(path: &Path) -> AppConfig {
         migrated = true;
     }
     if normalize_resource_metrics(&mut config.compact_resource_metrics) {
+        migrated = true;
+    }
+    if normalize_expanded_page_order(&mut config.expanded_page_order) {
         migrated = true;
     }
     let plugin_layout_len = config.plugin_widget_layout.len();

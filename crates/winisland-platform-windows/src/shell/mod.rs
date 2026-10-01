@@ -1,6 +1,7 @@
 mod activate;
 mod autostart;
 mod cjk;
+mod clipboard;
 mod hotkey;
 mod instance;
 mod links;
@@ -108,6 +109,12 @@ impl ShellIntegration for WindowsShell {
     }
     fn poll_tray_events(&self) -> Vec<TrayAction> {
         tray::poll_events()
+    }
+    fn clipboard_sequence(&self) -> u32 {
+        clipboard::sequence()
+    }
+    fn clipboard_text(&self, max_chars: usize) -> Option<String> {
+        clipboard::text(max_chars)
     }
     fn register_hotkey(&self, hotkey: Hotkey) -> Result<(), PlatformError> {
         hotkey::register(hotkey)
