@@ -29,6 +29,8 @@ mod frame;
 mod input;
 mod layout;
 mod pages;
+mod plugin_media;
+mod plugins;
 mod startup;
 mod system;
 mod v2;
@@ -61,6 +63,7 @@ struct PluginMediaSource {
 }
 
 pub struct App {
+    plugin_ui: plugins::PluginUiState,
     window: Option<WindowRef>,
     host_backdrop: bool,
     renderer: Option<Renderer>,
@@ -171,13 +174,19 @@ impl Default for App {
             .set_custom_font_path(config.custom_font_path.as_deref());
         let plugin_mgr = PluginManager::default();
         let plugin_host = match PluginHost::new(plugin_mgr.plugin_dir.clone(), 1) {
-            Ok(host) => Some(Rc::new(host)),
+            Ok(host) => {
+                host.runtime()
+                    .extensions
+                    .set_wake(std::sync::Arc::new(crate::platform::wake));
+                Some(Rc::new(host))
+            }
             Err(error) => {
                 log::error!("Cannot initialize ABI v2 plugin host: {error}");
                 None
             }
         };
         Self {
+            plugin_ui: plugins::PluginUiState::default(),
             window: None,
             host_backdrop: false,
             renderer: None,

@@ -14,6 +14,7 @@ use super::{
 };
 
 pub(super) struct WorkerChannels {
+    pub(super) session_bridge: super::sessions::SessionBridge,
     pub(super) info_tx: watch::Sender<MediaInfo>,
     pub(super) enabled_rx: watch::Receiver<bool>,
     pub(super) seek_rx: mpsc::UnboundedReceiver<u64>,
@@ -29,6 +30,7 @@ pub(super) struct WorkerChannels {
 
 pub(super) fn smtc_poll_loop(channels: WorkerChannels, cancel: CancellationToken) {
     let WorkerChannels {
+        session_bridge,
         info_tx,
         mut enabled_rx,
         mut seek_rx,
@@ -50,6 +52,7 @@ pub(super) fn smtc_poll_loop(channels: WorkerChannels, cancel: CancellationToken
         }
     };
     log::info!("SMTC: session manager created");
+    session_bridge.set_ready();
     let mut enabled = *enabled_rx.borrow_and_update();
 
     let mut current_lyrics_mode = LyricsMode::Online;
@@ -70,7 +73,9 @@ pub(super) fn smtc_poll_loop(channels: WorkerChannels, cancel: CancellationToken
         current_allowed_apps = apps;
     }
 
+    let mut session_worker = super::sessions::SessionWorker::new(session_bridge);
     let mut media_state = MediaUpdateState {
+        preferred: None,
         allowed_apps: current_allowed_apps,
         known_apps,
         last_session_seen: Instant::now(),
@@ -167,6 +172,19 @@ pub(super) fn smtc_poll_loop(channels: WorkerChannels, cancel: CancellationToken
             }
         }
 
+        let preferred =
+            session_worker.refresh(manager.as_ref(), &media_state.allowed_apps, enabled);
+        if preferred.as_ref().map(|session| session.identity())
+            != media_state
+                .preferred
+                .as_ref()
+                .map(|session| session.identity())
+        {
+            regular_update.expire();
+            media_state.timeline_cache.clear();
+        }
+        media_state.preferred = preferred;
+
         if !enabled {
             while seek_rx.try_recv().is_ok() {}
             while playback_rx.try_recv().is_ok() {}
@@ -185,6 +203,7 @@ pub(super) fn smtc_poll_loop(channels: WorkerChannels, cancel: CancellationToken
                 manager.as_ref(),
                 &media_state.allowed_apps,
                 &info_tx,
+                media_state.preferred.clone(),
                 seek_pos,
             ) {
                 info_tx.send_if_modified(|info| info.reject_seek(seek_pos));
@@ -193,7 +212,11 @@ pub(super) fn smtc_poll_loop(channels: WorkerChannels, cancel: CancellationToken
 
         while let Ok(cmd) = playback_rx.try_recv() {
             log::info!("SMTC: playback command {cmd:?}");
-            if let Some(session) = get_target_session(manager.as_ref(), &media_state.allowed_apps) {
+            if let Some(session) = media_state
+                .preferred
+                .clone()
+                .or_else(|| get_target_session(manager.as_ref(), &media_state.allowed_apps))
+            {
                 let command = match cmd {
                     PlaybackCommand::Toggle => MediaCommand::Toggle,
                     PlaybackCommand::Next => MediaCommand::Next,
@@ -243,9 +266,10 @@ fn apply_seek_request(
     manager: &dyn MediaContext,
     allowed_apps: &[String],
     info_tx: &watch::Sender<MediaInfo>,
+    preferred: Option<std::sync::Arc<dyn winisland_platform::MediaSessionHandle>>,
     position_ms: u64,
 ) -> bool {
-    let Some(session) = get_target_session(manager, allowed_apps) else {
+    let Some(session) = preferred.or_else(|| get_target_session(manager, allowed_apps)) else {
         log::debug!("SMTC: ignored seek without an active session");
         return false;
     };
@@ -275,6 +299,7 @@ fn apply_seek_request(
 }
 
 struct MediaUpdateState {
+    preferred: Option<std::sync::Arc<dyn winisland_platform::MediaSessionHandle>>,
     allowed_apps: Vec<String>,
     known_apps: Vec<String>,
     last_session_seen: Instant,
@@ -296,7 +321,11 @@ impl MediaUpdateState {
                 auto_allow_new_apps(manager, &self.allowed_apps, &mut self.known_apps);
         }
 
-        if let Some(session) = get_target_session(manager, &self.allowed_apps) {
+        if let Some(session) = self
+            .preferred
+            .clone()
+            .or_else(|| get_target_session(manager, &self.allowed_apps))
+        {
             match fetch_properties(
                 &session,
                 info_tx,

@@ -133,6 +133,14 @@ pub(crate) fn enforce_overlay_window_styles(hwnd: HWND, topmost: bool) {
     set_window_topmost(hwnd, topmost);
 }
 
+pub(crate) fn set_keyboard_input(hwnd: HWND, enabled: bool) {
+    if enabled {
+        modify_window_ex_style(hwnd, 0, WS_EX_NOACTIVATE.0 as isize);
+    } else {
+        modify_window_ex_style(hwnd, WS_EX_NOACTIVATE.0 as isize, 0);
+    }
+}
+
 // SAFETY: SetWindowPos is called on a validated HWND with flags that preserve
 // its size and position. The HWND_TOPMOST flag updates only the window's z-order
 // without stealing focus.

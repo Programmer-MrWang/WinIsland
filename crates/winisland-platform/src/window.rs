@@ -108,6 +108,7 @@ pub trait WindowSystem {
     fn theme(&self, id: WindowId) -> Option<Theme>;
     /// Sets the cursor icon; a missing window is ignored.
     fn set_cursor(&self, id: WindowId, cursor: CursorKind);
+    fn set_plugin_input(&self, id: WindowId, capture: bool, keyboard: bool);
     /// Applies the titlebar theme; unsupported or missing windows are ignored.
     fn set_titlebar_theme(&self, id: WindowId, is_light: bool);
     /// Starts composition backdrop for a live overlay; unavailable support returns an error.

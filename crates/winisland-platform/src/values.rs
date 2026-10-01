@@ -117,6 +117,10 @@ pub enum Key {
     Escape,
     ArrowLeft,
     ArrowRight,
+    ArrowUp,
+    ArrowDown,
+    Tab,
+    Delete,
     Character(String),
     Other,
 }
@@ -245,6 +249,7 @@ pub enum VirtualKey {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrayAction {
+    Plugin(u64),
     ToggleVisibility,
     OpenSettings,
     Restart,
@@ -271,6 +276,15 @@ pub struct Hotkey {
     pub shift: bool,
     pub win: bool,
     pub key: char,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PluginCommand {
+    pub id: u64,
+    pub title: String,
+    pub enabled: bool,
+    pub menu: bool,
+    pub hotkey: Option<Hotkey>,
 }
 
 #[derive(Clone, Debug)]

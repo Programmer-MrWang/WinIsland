@@ -11,6 +11,7 @@ use winisland_core::lyrics::{
 
 mod properties;
 mod session;
+pub mod sessions;
 mod worker;
 
 const SEEK_GUARD_DURATION: Duration = Duration::from_secs(4);
@@ -166,6 +167,7 @@ pub(super) enum PlaybackCommand {
 }
 
 pub struct SmtcListener {
+    session_bridge: sessions::SessionBridge,
     info_tx: watch::Sender<MediaInfo>,
     info_rx: watch::Receiver<MediaInfo>,
     enabled_tx: watch::Sender<bool>,
@@ -189,6 +191,8 @@ impl SmtcListener {
         known_apps: Vec<String>,
         lyrics_bridge: Option<winisland_plugin_host::lifecycle::LyricsBridge>,
     ) -> Self {
+        let session_bridge = sessions::SessionBridge::default();
+        let worker_sessions = session_bridge.clone();
         let (info_tx, info_rx) = watch::channel(MediaInfo::default());
         let (enabled_tx, enabled_rx) = watch::channel(enabled);
         let (seek_tx, seek_rx) = mpsc::unbounded_channel();
@@ -210,6 +214,7 @@ impl SmtcListener {
         tokio::task::spawn_blocking(move || {
             worker::smtc_poll_loop(
                 worker::WorkerChannels {
+                    session_bridge: worker_sessions,
                     info_tx: worker_info_tx,
                     enabled_rx,
                     seek_rx,
@@ -227,6 +232,7 @@ impl SmtcListener {
         });
 
         Self {
+            session_bridge,
             info_tx,
             info_rx,
             enabled_tx,
@@ -239,6 +245,19 @@ impl SmtcListener {
             wake_tx,
             cancel_token,
         }
+    }
+
+    pub fn plugin_sessions(&self) -> &sessions::SessionBridge {
+        &self.session_bridge
+    }
+
+    pub fn request_session(
+        &self,
+        request: sessions::SessionRequest,
+    ) -> winisland_plugin_api::PluginStatus {
+        let status = self.session_bridge.request(request);
+        self.wake_worker();
+        status
     }
 
     fn wake_worker(&self) {

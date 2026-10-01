@@ -10,7 +10,9 @@ use crate::types::v2::settings::{
 };
 use crate::types::v2::widget::WidgetSpecV2;
 use crate::types::v2::{
-    ByteSlice, ImageId, PluginToken, ResourceId, TextMetricsV2, TextStyleV2, Utf8Slice, WidgetId,
+    ByteSlice, CommandInfoV2, CommandSpecV2, EventSubscriptionV2, ImageId, InputRegionV2,
+    IslandStateV2, MediaSessionV2, PluginEventV2, PluginToken, ResourceId, SurfaceSpecV2,
+    TextMetricsV2, TextStyleV2, TimerSpecV2, Utf8Slice, WidgetId,
 };
 
 macro_rules! assert_layout {
@@ -162,6 +164,170 @@ assert_layout!(
     delete = 32
 );
 assert_layout!(LogApiV2, 24, 8, prefix = 0, write = 16);
+assert_layout!(
+    InputApiV2,
+    32,
+    8,
+    prefix = 0,
+    set_regions = 16,
+    release_capture = 24
+);
+assert_layout!(
+    CommandApiV2,
+    56,
+    8,
+    prefix = 0,
+    register = 16,
+    set_enabled = 24,
+    list = 32,
+    execute = 40,
+    release = 48
+);
+assert_layout!(
+    SurfaceApiV2,
+    64,
+    8,
+    prefix = 0,
+    create = 16,
+    update = 24,
+    release = 32,
+    submit_draw_list = 40,
+    logical_size = 48,
+    show_page = 56
+);
+assert_layout!(
+    EventsApiV2,
+    56,
+    8,
+    prefix = 0,
+    subscribe = 16,
+    create_timer = 24,
+    release = 32,
+    island_state = 40,
+    set_animation = 48
+);
+assert_layout!(MediaSessionApiV2, 32, 8, prefix = 0, list = 16, send = 24);
+assert_layout!(
+    PluginEventV2,
+    88,
+    8,
+    struct_size = 0,
+    detail = 4,
+    kind = 8,
+    target = 16,
+    resource = 24,
+    sequence = 32,
+    time_seconds = 40,
+    x = 48,
+    y = 52,
+    delta_x = 56,
+    delta_y = 60,
+    modifiers = 64,
+    code = 68,
+    data = 72
+);
+assert_layout!(
+    EventSubscriptionV2,
+    40,
+    8,
+    struct_size = 0,
+    reserved = 4,
+    events = 8,
+    target = 16,
+    callback = 24,
+    callback_data = 32
+);
+assert_layout!(
+    TimerSpecV2,
+    48,
+    8,
+    struct_size = 0,
+    flags = 4,
+    delay_ms = 8,
+    interval_ms = 16,
+    target = 24,
+    callback = 32,
+    callback_data = 40
+);
+assert_layout!(
+    InputRegionV2,
+    32,
+    8,
+    id = 0,
+    x = 8,
+    y = 12,
+    width = 16,
+    height = 20,
+    flags = 24,
+    reserved = 28
+);
+assert_layout!(
+    SurfaceSpecV2,
+    344,
+    4,
+    struct_size = 0,
+    kind = 4,
+    flags = 8,
+    order = 12,
+    width = 16,
+    height = 20,
+    key = 24,
+    title = 88
+);
+assert_layout!(
+    CommandSpecV2,
+    352,
+    8,
+    struct_size = 0,
+    flags = 4,
+    key = 8,
+    title = 72,
+    hotkey_modifiers = 328,
+    hotkey_key = 332,
+    callback = 336,
+    callback_data = 344
+);
+assert_layout!(
+    CommandInfoV2,
+    424,
+    4,
+    struct_size = 0,
+    flags = 4,
+    id = 8,
+    title = 168
+);
+assert_layout!(
+    MediaSessionV2,
+    1072,
+    8,
+    struct_size = 0,
+    flags = 4,
+    id = 8,
+    available_controls = 16,
+    reserved = 20,
+    duration_ms = 24,
+    position_ms = 32,
+    sampled_at_seconds = 40,
+    source = 48,
+    title = 304,
+    artist = 560,
+    album = 816
+);
+assert_layout!(
+    IslandStateV2,
+    32,
+    8,
+    struct_size = 0,
+    expanded = 4,
+    visible = 5,
+    light_theme = 6,
+    reserved = 7,
+    page = 8,
+    width = 16,
+    height = 20,
+    scale = 24,
+    reserved2 = 28
+);
 
 assert_layout!(
     ContextDataV2,

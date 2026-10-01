@@ -30,6 +30,8 @@ pub use r#loop::wake;
 pub struct WindowsWindowSystem;
 
 struct WindowRecord {
+    plugin_capture: bool,
+    plugin_keyboard: bool,
     host_backdrop: Option<Rc<HostBackdrop>>,
     window: Arc<Window>,
     backdrop: Option<Arc<Window>>,
@@ -78,6 +80,8 @@ fn register_window(window: Arc<Window>, backdrop: Option<Arc<Window>>) -> Window
     }
     let id = WindowId(u64::from(window.id()));
     let record = WindowRecord {
+        plugin_capture: false,
+        plugin_keyboard: false,
         host_backdrop: None,
         window,
         backdrop,
@@ -206,6 +210,43 @@ fn window_hwnd(window: &Window) -> Option<usize> {
 }
 
 impl WindowSystem for WindowsWindowSystem {
+    fn set_plugin_input(&self, id: WindowId, capture: bool, keyboard: bool) {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{GetCapture, ReleaseCapture, SetCapture};
+        let state = WINDOWS.with(|windows| {
+            let mut windows = windows.borrow_mut();
+            let record = windows.get_mut(&id)?;
+            let hwnd = window_hwnd(&record.window).map(|hwnd| HWND(hwnd as *mut _))?;
+            let changed_capture = record.plugin_capture != capture;
+            let changed_keyboard = record.plugin_keyboard != keyboard;
+            record.plugin_capture = capture;
+            record.plugin_keyboard = keyboard;
+            Some((
+                record.window.clone(),
+                hwnd,
+                changed_capture,
+                changed_keyboard,
+            ))
+        });
+        if let Some((window, hwnd, changed_capture, changed_keyboard)) = state {
+            if changed_capture {
+                // SAFETY: The window belongs to this UI thread; capture is released only for its owner.
+                unsafe {
+                    if capture {
+                        let _ = SetCapture(hwnd);
+                    } else if GetCapture() == hwnd {
+                        let _ = ReleaseCapture();
+                    }
+                }
+            }
+            styles::set_keyboard_input(hwnd, keyboard);
+            if changed_keyboard {
+                window.set_ime_allowed(keyboard);
+                if keyboard {
+                    window.focus_window();
+                }
+            }
+        }
+    }
     fn run(&self, handler: &mut dyn AppHandler) -> Result<(), PlatformError> {
         let result = r#loop::run(handler);
         let records = WINDOWS.with(|windows| std::mem::take(&mut *windows.borrow_mut()));
@@ -408,12 +449,21 @@ impl WindowSystem for WindowsWindowSystem {
     }
 
     fn apply_overlay_styles(&self, id: WindowId, styles: OverlayStyles) {
+        let keyboard = WINDOWS.with(|windows| {
+            windows
+                .borrow()
+                .get(&id)
+                .is_some_and(|record| record.plugin_keyboard)
+        });
         let _ = with_window(id, |window| {
             if let Some(hwnd) = window_hwnd(window) {
                 styles::enforce_overlay_window_styles(
                     windows::Win32::Foundation::HWND(hwnd as *mut _),
                     styles.topmost,
                 );
+                if keyboard {
+                    styles::set_keyboard_input(HWND(hwnd as *mut _), true);
+                }
             }
             window.set_skip_taskbar(styles.skip_taskbar);
         });

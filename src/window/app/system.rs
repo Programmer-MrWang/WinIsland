@@ -404,6 +404,18 @@ impl App {
                 .next()
         {
             match action {
+                TrayAction::Plugin(id) => {
+                    if let Some(host) = &self.plugin_host
+                        && let Some(command) = host
+                            .runtime()
+                            .extensions
+                            .commands()
+                            .into_iter()
+                            .find(|command| command.resource == id)
+                    {
+                        let _ = host.runtime().extensions.invoke(&command.id, &[]);
+                    }
+                }
                 TrayAction::ToggleVisibility => {
                     self.visible = !self.visible;
                     window_ref.set_visible(self.visible);

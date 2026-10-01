@@ -36,6 +36,7 @@ enum WorkerEvent {
         id: u64,
         command: u32,
         position_ms: u64,
+        completion: Option<(PluginToken, u64)>,
     },
     HostState {
         id: u64,
@@ -147,6 +148,9 @@ impl PluginInstance {
             PluginHostError::Worker("plugin tick widget list lock is poisoned".into())
         })?;
         *current = widgets;
+        if let Some(worker) = &self.worker {
+            worker.thread().unpark();
+        }
         Ok(())
     }
 
@@ -168,28 +172,56 @@ impl PluginInstance {
         let widgets = Arc::clone(&self.tick_widgets);
         let failure = Arc::clone(&self.tick_failure);
         let handle = self.handle;
+        let token = self.token;
         let identity = Arc::clone(&self.identity);
         let runtime_address = runtime as *const HostRuntime as usize;
         self.worker = Some(
             thread::Builder::new()
                 .name(format!("plugin-tick-{}", self.library.metadata().id))
                 .spawn(move || {
+                    // SAFETY: The pinned runtime outlives this joined worker.
+                    let runtime = unsafe { &*(runtime_address as *const HostRuntime) };
+                    runtime.extensions.attach_worker(token, thread::current());
                     let mut previous = Instant::now();
+                    let mut next_tick = previous;
                     while !stop.load(Ordering::Acquire) {
-                        while let Ok(event) = event_rx.try_recv() {
+                        for _ in 0..256 {
+                            let Ok(event) = event_rx.try_recv() else {
+                                break;
+                            };
                             // SAFETY: The pinned runtime outlives this joined worker.
                             let runtime = unsafe { &*(runtime_address as *const HostRuntime) };
                             dispatch_event(runtime, &identity, event);
                         }
+                        runtime.extensions.dispatch(token, &identity);
                         let frame_start = Instant::now();
                         let dt = frame_start.duration_since(previous).as_secs_f64();
-                        previous = frame_start;
+                        let due = frame_start >= next_tick;
+                        let mut ticking = false;
                         if let Some(tick) = tick {
                             let snapshot = match widgets.lock() {
                                 Ok(guard) => guard.clone(),
                                 Err(_) => break,
                             };
                             for widget in snapshot {
+                                let surface = runtime
+                                    .state
+                                    .lock()
+                                    .ok()
+                                    .and_then(|state| {
+                                        state
+                                            .widgets
+                                            .get(&widget.get())
+                                            .map(|r| r.surface.is_some())
+                                    })
+                                    .unwrap_or(false);
+                                if !runtime.extensions.should_tick(widget.get(), surface) {
+                                    continue;
+                                }
+                                ticking = true;
+                                if !due {
+                                    continue;
+                                }
                                 if stop.load(Ordering::Acquire) {
                                     break;
                                 }
@@ -207,23 +239,40 @@ impl PluginInstance {
                                 }
                             }
                         }
-                        let remaining = period.saturating_sub(frame_start.elapsed());
+                        if ticking && due {
+                            previous = frame_start;
+                            next_tick = Instant::now() + period;
+                        }
+                        let remaining = runtime.extensions.wait_duration(
+                            token,
+                            ticking,
+                            next_tick.saturating_duration_since(Instant::now()),
+                        );
                         if !remaining.is_zero() {
-                            match event_rx.recv_timeout(remaining) {
-                                Ok(event) => {
-                                    // SAFETY: The pinned runtime outlives this joined worker.
-                                    let runtime =
-                                        unsafe { &*(runtime_address as *const HostRuntime) };
-                                    dispatch_event(runtime, &identity, event);
-                                }
-                                Err(mpsc::RecvTimeoutError::Timeout) => {}
-                                Err(mpsc::RecvTimeoutError::Disconnected) => break,
-                            }
+                            thread::park_timeout(remaining);
+                        }
+                    }
+                    while let Ok(event) = event_rx.try_recv() {
+                        if let WorkerEvent::MediaCommand {
+                            completion: Some((caller, sequence)),
+                            ..
+                        } = event
+                        {
+                            runtime.extensions.complete(
+                                caller,
+                                sequence,
+                                PluginStatus::StaleHandle,
+                            );
                         }
                     }
                 })
                 .map_err(|error| PluginHostError::Worker(error.to_string()))?,
         );
+        if let Some(worker) = &self.worker {
+            runtime
+                .extensions
+                .attach_worker(self.token, worker.thread().clone());
+        }
         self.event_tx = Some(event_tx);
         Ok(())
     }
@@ -233,9 +282,13 @@ impl PluginInstance {
         id: u64,
         command: u32,
         position_ms: u64,
+        completion: Option<(PluginToken, u64)>,
     ) -> Result<(), PluginHostError> {
         if self.stopped || self.stop_worker.load(Ordering::Acquire) {
             return Err(PluginHostError::Worker("plugin worker has stopped".into()));
+        }
+        if let Some(worker) = &self.worker {
+            worker.thread().unpark();
         }
         self.event_tx
             .as_ref()
@@ -244,13 +297,22 @@ impl PluginInstance {
                 id,
                 command,
                 position_ms,
+                completion,
             })
             .map_err(|_| PluginHostError::Worker("plugin worker has exited".into()))
+            .inspect(|_| {
+                if let Some(worker) = &self.worker {
+                    worker.thread().unpark();
+                }
+            })
     }
 
     pub fn queue_host_state(&self, id: u64, snapshot: HostStateV2) -> Result<(), PluginHostError> {
         if self.stopped || self.stop_worker.load(Ordering::Acquire) {
             return Err(PluginHostError::Worker("plugin worker has stopped".into()));
+        }
+        if let Some(worker) = &self.worker {
+            worker.thread().unpark();
         }
         self.event_tx
             .as_ref()
@@ -260,6 +322,11 @@ impl PluginInstance {
                 snapshot: Box::new(snapshot),
             })
             .map_err(|_| PluginHostError::Worker("plugin worker has exited".into()))
+            .inspect(|_| {
+                if let Some(worker) = &self.worker {
+                    worker.thread().unpark();
+                }
+            })
     }
 
     pub fn call_settings_change(
@@ -272,6 +339,9 @@ impl PluginInstance {
             return Err(PluginHostError::Worker("plugin worker has stopped".into()));
         }
         let (response, receive) = mpsc::channel();
+        if let Some(worker) = &self.worker {
+            worker.thread().unpark();
+        }
         self.event_tx
             .as_ref()
             .ok_or_else(|| PluginHostError::Worker("plugin worker is unavailable".into()))?
@@ -281,7 +351,12 @@ impl PluginInstance {
                 value: value.to_string(),
                 response,
             })
-            .map_err(|_| PluginHostError::Worker("plugin worker has exited".into()))?;
+            .map_err(|_| PluginHostError::Worker("plugin worker has exited".into()))
+            .inspect(|_| {
+                if let Some(worker) = &self.worker {
+                    worker.thread().unpark();
+                }
+            })?;
         receive
             .recv_timeout(Duration::from_secs(2))
             .map_err(|error| {
@@ -295,6 +370,9 @@ impl PluginInstance {
         }
         self.stop_worker.store(true, Ordering::Release);
         self.event_tx.take();
+        if let Some(worker) = &self.worker {
+            worker.thread().unpark();
+        }
         if let Some(worker) = self.worker.take() {
             worker.join().map_err(|_| {
                 PluginHostError::Worker("plugin tick worker panicked; DLL kept loaded".into())
@@ -340,7 +418,13 @@ fn dispatch_event(runtime: &HostRuntime, identity: &Arc<PluginIdentity>, event: 
             id,
             command,
             position_ms,
-        } => dispatch_media_command(runtime, identity, id, command, position_ms),
+            completion,
+        } => {
+            let status = dispatch_media_command(runtime, identity, id, command, position_ms);
+            if let Some((token, sequence)) = completion {
+                runtime.extensions.complete(token, sequence, status);
+            }
+        }
         WorkerEvent::HostState { id, snapshot } => {
             dispatch_host_state(runtime, identity, id, *snapshot)
         }
@@ -447,26 +531,26 @@ fn dispatch_media_command(
     id: u64,
     command: u32,
     position_ms: u64,
-) {
+) -> PluginStatus {
     let required_control = match command {
         MEDIA_COMMAND_TOGGLE_PLAY => MEDIA_CONTROL_TOGGLE_PLAY,
         MEDIA_COMMAND_PREVIOUS => MEDIA_CONTROL_PREVIOUS,
         MEDIA_COMMAND_NEXT => MEDIA_CONTROL_NEXT,
         MEDIA_COMMAND_SEEK => MEDIA_CONTROL_SEEK,
-        _ => return,
+        _ => return PluginStatus::InvalidArgument,
     };
     let callback = {
         let Ok(mut state) = runtime.state.lock() else {
-            return;
+            return PluginStatus::Internal;
         };
         let Some(media) = state.media.get_mut(&id) else {
-            return;
+            return PluginStatus::StaleHandle;
         };
         if media.available_controls & required_control == 0 {
-            return;
+            return PluginStatus::InvalidArgument;
         }
         let Some(callback) = media.on_command else {
-            return;
+            return PluginStatus::InvalidArgument;
         };
         media.in_flight = media.in_flight.saturating_add(1);
         (callback, media.callback_data)
@@ -484,6 +568,7 @@ fn dispatch_media_command(
     {
         media.in_flight = media.in_flight.saturating_sub(1);
     }
+    PluginStatus::Ok
 }
 
 impl Drop for PluginInstance {

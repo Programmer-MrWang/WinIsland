@@ -147,11 +147,25 @@ pub fn draw_island(
     } else {
         None
     };
+    if let Some(host) = params.style.plugin_host {
+        host.runtime().extensions.begin_frame();
+    }
     draw_expanded_shadow(painter, &params, &island_path);
     draw_background_layer(painter, drawing_context, &params, rect, &island_path);
     painter.save();
     painter.clip_path(&island_path);
 
+    if let Some(host) = params.style.plugin_host {
+        crate::ui::plugin::draw_layer(
+            painter,
+            host,
+            params.style.plugin_frames,
+            winisland_plugin_api::SURFACE_BACKGROUND,
+            rect,
+            layout.compact_scale,
+            ((1.0 - layout.hide_progress) * 255.0) as u8,
+        );
+    }
     let compact_overlay_visible = params.compact_overlay.is_visible();
     let expanded_alpha = expanded_content_alpha(
         layout.expansion_progress,
@@ -194,6 +208,18 @@ pub fn draw_island(
             mini_alpha,
             visualizer_height_scale,
         );
+    }
+    if let Some(host) = params.style.plugin_host {
+        crate::ui::plugin::draw_layer(
+            painter,
+            host,
+            params.style.plugin_frames,
+            winisland_plugin_api::SURFACE_FOREGROUND,
+            rect,
+            layout.compact_scale,
+            ((1.0 - layout.hide_progress) * 255.0) as u8,
+        );
+        host.runtime().extensions.finish_frame();
     }
     painter.restore();
     draw_island_border(painter, &params);
@@ -388,8 +414,9 @@ fn draw_compact_layer(
         center_occupied || has_mini_content,
         has_mini_content,
     );
-    let left_extension = left_extension * layout.compact_scale;
-    let right_extension = right_extension * layout.compact_scale;
+    let (plugin_left, plugin_right) = crate::ui::plugin::compact_widths(style.plugin_host);
+    let left_extension = (left_extension + plugin_left) * layout.compact_scale;
+    let right_extension = (right_extension + plugin_right) * layout.compact_scale;
     draw_mini_content(MiniContentParams {
         painter,
         content: visible_mini_content,
@@ -419,15 +446,30 @@ fn draw_compact_layer(
         painter,
         style.compact_widget_layout,
         Rect::from_xywh(
-            layout.island_x,
+            layout.island_x + plugin_left * layout.compact_scale,
             layout.stable_island_y,
-            layout.current_w,
+            (layout.current_w - (plugin_left + plugin_right) * layout.compact_scale).max(0.0),
             layout.base_h,
         ),
         layout.compact_scale,
         (alpha * layout.compact_widget_opacity * f32::from(u8::MAX)) as u8,
         has_mini_content,
     );
+    if let Some(host) = style.plugin_host {
+        crate::ui::plugin::draw_compact(
+            painter,
+            host,
+            style.plugin_frames,
+            Rect::from_xywh(
+                layout.island_x,
+                layout.stable_island_y,
+                layout.current_w,
+                layout.base_h,
+            ),
+            layout.compact_scale,
+            (alpha * layout.compact_widget_opacity * 255.0) as u8,
+        );
+    }
 }
 
 fn draw_pager(

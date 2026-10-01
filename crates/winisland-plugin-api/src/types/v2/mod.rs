@@ -104,3 +104,5 @@ pub type HostStateChangedFnV2 = unsafe extern "C" fn(
     callback_data: *mut c_void,
     state: *const context::HostStateV2,
 ) -> PluginStatus;
+mod extensions;
+pub use extensions::*;

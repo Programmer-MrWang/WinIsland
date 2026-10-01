@@ -1,5 +1,7 @@
 mod draw;
+mod extensions;
 mod resources;
+pub use extensions::*;
 
 use std::fmt;
 use std::ptr::NonNull;

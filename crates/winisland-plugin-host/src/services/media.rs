@@ -170,6 +170,9 @@ pub unsafe extern "C" fn release(
         return status;
     }
     state.media.remove(&id.get());
+    if state.selected_media == Some(id.get()) {
+        state.selected_media = None;
+    }
     state.media_revision = state.media_revision.wrapping_add(1);
     PluginStatus::Ok
 }

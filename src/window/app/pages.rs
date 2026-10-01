@@ -12,9 +12,18 @@ const WHEEL_PIXEL_THRESHOLD: f32 = 40.0;
 
 impl App {
     pub(super) fn expanded_pages(&self) -> Vec<ExpandedPage> {
-        available_pages(&PageAvailability {
+        let mut pages = available_pages(&PageAvailability {
             music: self.music_page_available,
-        })
+        });
+        if let Some(host) = &self.plugin_host {
+            pages.extend(
+                host.surfaces()
+                    .into_iter()
+                    .filter(|(_, spec)| spec.kind == winisland_plugin_api::SURFACE_PAGE)
+                    .map(|(id, _)| ExpandedPage::Plugin(id)),
+            );
+        }
+        pages
     }
 
     fn page_index(&self, page: ExpandedPage) -> Option<usize> {

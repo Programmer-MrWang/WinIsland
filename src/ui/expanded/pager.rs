@@ -23,6 +23,7 @@ pub enum ExpandedPage {
     Music,
     Widgets,
     Calendar,
+    Plugin(u64),
 }
 
 pub struct PageAvailability {
@@ -35,7 +36,7 @@ impl ExpandedPage {
     pub fn is_available(self, availability: &PageAvailability) -> bool {
         match self {
             Self::Music => availability.music,
-            Self::Widgets | Self::Calendar => true,
+            Self::Widgets | Self::Calendar | Self::Plugin(_) => true,
         }
     }
 }

@@ -5,6 +5,8 @@ use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 use winisland_platform::{PlatformError, TrayAction, TrayLabels, TrayTheme};
 
 struct WindowsTray {
+    menu: Menu,
+    plugin_items: Vec<(u64, MenuItem)>,
     tray: TrayIcon,
     toggle: MenuItem,
     settings: MenuItem,
@@ -41,12 +43,14 @@ pub(super) fn install(theme: TrayTheme, labels: TrayLabels) -> Result<(), Platfo
     menu.append(&exit).map_err(PlatformError::backend)?;
     let tray = TrayIconBuilder::new()
         .with_tooltip(&labels.tooltip)
-        .with_menu(Box::new(menu))
+        .with_menu(Box::new(menu.clone()))
         .with_icon(icon(theme)?)
         .build()
         .map_err(PlatformError::backend)?;
     TRAY.with(|slot| {
         *slot.borrow_mut() = Some(WindowsTray {
+            menu,
+            plugin_items: Vec::new(),
             tray,
             toggle,
             settings,
@@ -94,8 +98,30 @@ pub(super) fn poll_events() -> Vec<TrayAction> {
         } else if event.id == tray.exit.id() {
             Some(TrayAction::Exit)
         } else {
-            None
+            tray.plugin_items
+                .iter()
+                .find_map(|(id, item)| (event.id == item.id()).then_some(TrayAction::Plugin(*id)))
         };
         action.into_iter().collect()
+    })
+}
+
+pub(super) fn set_plugin_commands(
+    commands: &[winisland_platform::PluginCommand],
+) -> Result<(), PlatformError> {
+    TRAY.with(|slot| {
+        let mut tray = slot.borrow_mut();
+        let Some(tray) = tray.as_mut() else {
+            return Ok(());
+        };
+        for (_, item) in tray.plugin_items.drain(..) {
+            tray.menu.remove(&item).map_err(PlatformError::backend)?;
+        }
+        for command in commands.iter().filter(|command| command.menu) {
+            let item = MenuItem::new(&command.title, command.enabled, None);
+            tray.menu.append(&item).map_err(PlatformError::backend)?;
+            tray.plugin_items.push((command.id, item));
+        }
+        Ok(())
     })
 }

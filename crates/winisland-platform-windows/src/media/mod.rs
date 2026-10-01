@@ -113,6 +113,31 @@ impl WindowsMediaSession {
 }
 
 impl MediaSessionHandle for WindowsMediaSession {
+    fn identity(&self) -> u64 {
+        use windows::core::Interface;
+        self.0
+            .cast::<windows::core::IUnknown>()
+            .map(|object| object.as_raw() as usize as u64)
+            .unwrap_or(0)
+    }
+
+    fn controls(&self) -> winisland_platform::MediaCapabilities {
+        let Some(controls) = self
+            .0
+            .GetPlaybackInfo()
+            .ok()
+            .and_then(|info| info.Controls().ok())
+        else {
+            return Default::default();
+        };
+        winisland_platform::MediaCapabilities {
+            play: controls.IsPlayEnabled().unwrap_or(false),
+            pause: controls.IsPauseEnabled().unwrap_or(false),
+            next: controls.IsNextEnabled().unwrap_or(false),
+            previous: controls.IsPreviousEnabled().unwrap_or(false),
+            seek: controls.IsPlaybackPositionEnabled().unwrap_or(false),
+        }
+    }
     fn source_app_id(&self) -> Option<String> {
         self.0.SourceAppUserModelId().ok().map(|id| id.to_string())
     }
@@ -187,7 +212,9 @@ impl MediaSessionHandle for WindowsMediaSession {
                     .map_err(PlatformError::backend);
             }
         };
-        operation.map(|_| true).map_err(PlatformError::backend)
+        operation
+            .and_then(|operation| operation.join())
+            .map_err(PlatformError::backend)
     }
 
     fn thumbnail(&self, expected_title: &str) -> Result<Vec<u8>, ThumbnailError> {
