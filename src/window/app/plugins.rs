@@ -148,6 +148,7 @@ impl App {
                 ExpandedPage::Music => 1,
                 ExpandedPage::Widgets => 2,
                 ExpandedPage::Calendar => 3,
+                ExpandedPage::Timer => 4,
                 ExpandedPage::Plugin(id) => id,
             },
             width: self.springs.w.value,

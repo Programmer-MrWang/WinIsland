@@ -23,6 +23,7 @@ use winisland_render::{Renderer, RendererTargetId};
 
 pub mod input;
 pub mod items;
+mod page_order;
 pub mod pages;
 mod popup;
 pub mod renderer;
@@ -234,6 +235,7 @@ pub struct SettingsApp {
     pub(crate) widget_hover_progress: f32,
     pub(crate) widget_drag_lift_progress: f32,
     pub(crate) widget_drop_animation: Option<WidgetDropAnimation>,
+    pub(crate) page_order: page_order::PageOrderState,
     pub(crate) resource_editor_open: bool,
     pub(crate) plugin_widgets: Vec<PluginWidget>,
     pub(crate) plugin_host: Option<Rc<PluginHost>>,
@@ -367,6 +369,7 @@ impl SettingsApp {
             widget_hover_progress: 0.0,
             widget_drag_lift_progress: 0.0,
             widget_drop_animation: None,
+            page_order: page_order::PageOrderState::default(),
             resource_editor_open: false,
             plugin_widgets,
             plugin_host: None,
@@ -805,6 +808,7 @@ impl SettingsApp {
             redraw = true;
         }
         redraw |= self.update_widget_hover();
+        redraw |= self.update_page_order_drag();
         redraw |= self.update_popup_hover();
         if mouse_moved {
             self.last_hover_mouse_pos = new_position;
@@ -1070,6 +1074,7 @@ impl SettingsApp {
                     crate::platform::window().begin_drag(window.id());
                 }
             }
+            None if self.handle_page_order_press() => {}
             None if self.handle_widget_drag_press() => {
                 self.widget_drag_lift_progress = 0.0;
                 self.widget_drop_animation = None;
@@ -1103,7 +1108,8 @@ impl SettingsApp {
             return;
         }
         let scroll_released = std::mem::take(&mut self.scroll_dragging);
-        if scroll_released || self.handle_widget_drag_release() {
+        if scroll_released || self.handle_widget_drag_release() || self.handle_page_order_release()
+        {
             self.request_redraw();
         }
     }
@@ -1165,7 +1171,8 @@ impl SettingsApp {
 
         let has_anim = self.switch_anim.is_animating()
             || self.anim.is_animating()
-            || self.widget_interaction_animating();
+            || self.widget_interaction_animating()
+            || self.page_order_animating();
         let has_popup = self.popup.is_some();
         let is_scrolling = (self.target_scroll_y - self.scroll_y).abs() > 0.1;
         let is_widget_dragging = self.widget_drag_active();
@@ -1206,6 +1213,7 @@ impl SettingsApp {
             .clamp(0.001, 0.05);
         self.last_frame_time = now;
         redraw |= self.update_widget_interaction_animations(dt);
+        redraw |= self.update_page_order_animation(dt);
 
         if (self.scroll_y - self.target_scroll_y).abs() > f32::EPSILON {
             self.scroll_y = self.target_scroll_y;

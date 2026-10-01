@@ -124,7 +124,7 @@ impl RowLayout {
 impl SettingsApp {
     fn resource_editor_metrics(&self) -> &[winisland_core::config::ResourceMetricConfig] {
         match self.widget_editor_mode {
-            WidgetEditorMode::Expanded => &self.config.resource_metrics,
+            WidgetEditorMode::Expanded | WidgetEditorMode::Pages => &self.config.resource_metrics,
             WidgetEditorMode::Compact => &self.config.compact_resource_metrics,
         }
     }
@@ -133,14 +133,16 @@ impl SettingsApp {
         &mut self,
     ) -> &mut Vec<winisland_core::config::ResourceMetricConfig> {
         match self.widget_editor_mode {
-            WidgetEditorMode::Expanded => &mut self.config.resource_metrics,
+            WidgetEditorMode::Expanded | WidgetEditorMode::Pages => {
+                &mut self.config.resource_metrics
+            }
             WidgetEditorMode::Compact => &mut self.config.compact_resource_metrics,
         }
     }
 
     fn resource_editor_list_top(&self) -> f32 {
         match self.widget_editor_mode {
-            WidgetEditorMode::Expanded => EXPANDED_LIST_TOP,
+            WidgetEditorMode::Expanded | WidgetEditorMode::Pages => EXPANDED_LIST_TOP,
             WidgetEditorMode::Compact => COMPACT_LIST_TOP,
         }
     }
@@ -349,7 +351,9 @@ impl SettingsApp {
         draw_text(
             painter,
             &tr(match self.widget_editor_mode {
-                WidgetEditorMode::Expanded => "resource_editor_title_expanded",
+                WidgetEditorMode::Expanded | WidgetEditorMode::Pages => {
+                    "resource_editor_title_expanded"
+                }
                 WidgetEditorMode::Compact => "resource_editor_title_compact",
             }),
             dialog.left + DIALOG_PADDING,

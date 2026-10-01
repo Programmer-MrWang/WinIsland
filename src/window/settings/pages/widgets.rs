@@ -14,10 +14,18 @@ use winisland_core::config::{
     widget_covering_slot,
 };
 
+use super::super::page_order::page_order_list_height;
 use super::super::{SETTINGS_HEADER_H, SIDEBAR_W, SettingsApp, WIDGETS_PAGE_INDEX};
+use super::SettingsPage;
 use crate::utils::settings_ui::WidgetEditorMode;
+use winisland_core::i18n::tr;
 
-const MODE_CONTROL_W: f32 = 154.0;
+const MODE_CONTROL_W: f32 = 231.0;
+const MODES: [WidgetEditorMode; 3] = [
+    WidgetEditorMode::Expanded,
+    WidgetEditorMode::Compact,
+    WidgetEditorMode::Pages,
+];
 const MODE_CONTROL_H: f32 = 30.0;
 const MODE_CONTROL_RIGHT: f32 = 18.0;
 const MODE_CONTROL_Y: f32 = 17.0;
@@ -50,8 +58,20 @@ impl SettingsApp {
                 .len(),
                 width,
             ),
+            WidgetEditorMode::Pages => return self.build_page_order_page().into_items(),
         };
         vec![SettingsItem::WidgetPreview { height }]
+    }
+
+    fn build_page_order_page(&self) -> SettingsPage<()> {
+        let mut page = SettingsPage::new();
+        page.section(tr("page_order"));
+        page.push(SettingsItem::Custom {
+            height: page_order_list_height(self.config.expanded_page_order.len()),
+        });
+        page.spacer(10.0);
+        page.row_label(tr("page_order_hint"));
+        page
     }
 
     pub(crate) fn widget_mode_control_rect(&self) -> Rect {
@@ -66,14 +86,13 @@ impl SettingsApp {
 
     pub(crate) fn widget_mode_segment_rect(&self, mode: WidgetEditorMode) -> Rect {
         let control = self.widget_mode_control_rect();
-        let segment_width = control.width() / 2.0;
+        let segment_width = control.width() / MODES.len() as f32;
+        let index = MODES
+            .iter()
+            .position(|candidate| *candidate == mode)
+            .unwrap_or(0);
         Rect::from_xywh(
-            control.left
-                + if mode == WidgetEditorMode::Compact {
-                    segment_width
-                } else {
-                    0.0
-                },
+            control.left + segment_width * index as f32,
             control.top,
             segment_width,
             control.height(),
@@ -87,14 +106,9 @@ impl SettingsApp {
         {
             return None;
         }
-        if self
-            .widget_mode_segment_rect(WidgetEditorMode::Expanded)
-            .contains(point)
-        {
-            Some(WidgetEditorMode::Expanded)
-        } else {
-            Some(WidgetEditorMode::Compact)
-        }
+        MODES
+            .into_iter()
+            .find(|mode| self.widget_mode_segment_rect(*mode).contains(point))
     }
 
     pub(crate) fn handle_widget_mode_click(&mut self, x: f32, y: f32) -> bool {
@@ -178,11 +192,13 @@ impl SettingsApp {
             WidgetEditorMode::Compact => self
                 .compact_widget_preview_hit_at_mouse()
                 .is_some_and(|hit| hit != CompactWidgetPreviewHit::None),
+            WidgetEditorMode::Pages => false,
         }
     }
 
     pub(crate) fn widget_editor_hover_at_mouse(&mut self) -> Option<WidgetEditorHover> {
         match self.widget_editor_mode {
+            WidgetEditorMode::Pages => None,
             WidgetEditorMode::Expanded => {
                 self.expanded_widget_preview_hit_at_mouse()
                     .and_then(|hit| match hit {
@@ -231,6 +247,7 @@ impl SettingsApp {
 
     pub(crate) fn widget_preview_slot_at_mouse(&mut self) -> Option<WidgetEditorSlot> {
         match self.widget_editor_mode {
+            WidgetEditorMode::Pages => None,
             WidgetEditorMode::Expanded => {
                 self.expanded_widget_preview_hit_at_mouse()
                     .and_then(|hit| match hit {
@@ -254,6 +271,7 @@ impl SettingsApp {
         match self.widget_editor_mode {
             WidgetEditorMode::Expanded => self.widget_dragging.is_some(),
             WidgetEditorMode::Compact => self.compact_widget_dragging.is_some(),
+            WidgetEditorMode::Pages => false,
         }
     }
 

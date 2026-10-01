@@ -1,3 +1,4 @@
+use crate::utils::settings_ui::WidgetEditorMode;
 use crate::utils::settings_ui::hover_test;
 use crate::utils::settings_ui::items::SIDEBAR_PAD;
 use winisland_platform::Key;
@@ -79,6 +80,7 @@ impl SettingsApp {
         match self.active_page {
             0 => self.handle_general_click(input),
             1 => self.handle_music_click(input),
+            2 if self.widget_editor_mode == WidgetEditorMode::Pages => {}
             2 => {
                 if self.handle_widget_click()
                     && let Some(window) = &self.window
@@ -129,7 +131,9 @@ impl SettingsApp {
                 return true;
             }
         }
-        if self.widget_mode_at(mouse_x, mouse_y).is_some() {
+        if self.widget_mode_at(mouse_x, mouse_y).is_some()
+            || self.page_order_hovered(mouse_x, mouse_y)
+        {
             return true;
         }
 

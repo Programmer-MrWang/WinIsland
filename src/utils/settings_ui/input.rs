@@ -57,6 +57,7 @@ pub enum StepDirection {
 pub enum WidgetEditorMode {
     Expanded,
     Compact,
+    Pages,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

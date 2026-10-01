@@ -74,6 +74,8 @@ impl App {
         }
         self.handle_tray_events(&window);
         self.handle_hide_hotkey(&window, now);
+        self.handle_timer_finished(&window);
+        self.poll_clipboard_link(&window);
         self.reload_config_if_changed(&window);
         if self.is_hidden() && !self.can_hide() {
             self.reveal_island();
@@ -399,6 +401,56 @@ impl App {
                 }
             );
         }
+    }
+
+    fn poll_clipboard_link(&mut self, window: &WindowRef) {
+        const MAX_CLIPBOARD_CHARS: usize = 2048;
+        let sequence = crate::platform::shell().clipboard_sequence();
+        if sequence == self.clipboard_sequence {
+            return;
+        }
+        self.clipboard_sequence = sequence;
+        if !self.config.clipboard_link_prompt
+            || !self.visible
+            || self.expanded
+            || self.is_hidden()
+            || self.fullscreen_hide_active()
+        {
+            return;
+        }
+        let Some(url) = crate::platform::shell()
+            .clipboard_text(MAX_CLIPBOARD_CHARS + 1)
+            .and_then(|text| crate::ui::compact::extract_link(&text))
+        else {
+            return;
+        };
+        self.compact_overlay.show_link(url);
+        self.idle_timer = Instant::now();
+        window.request_redraw();
+    }
+
+    fn handle_timer_finished(&mut self, window: &WindowRef) {
+        let Some(minutes) = crate::ui::expanded::timer_view::poll_finished() else {
+            return;
+        };
+        let duration = winisland_core::i18n::tr_args("timer_minutes", &[&minutes.to_string()]);
+        Self::show_toast(
+            &winisland_core::i18n::tr("timer_done"),
+            &winisland_core::i18n::tr_args("timer_done_toast", &[&duration]),
+        );
+        log::info!("Timer finished ({minutes} min)");
+        if !self.visible || self.fullscreen_hide_active() {
+            return;
+        }
+        if self.is_hidden() {
+            self.reveal_island();
+        }
+        if !self.expanded {
+            self.expand();
+        }
+        self.current_page = ExpandedPage::Timer;
+        self.idle_timer = Instant::now();
+        window.request_redraw();
     }
 
     fn handle_hide_hotkey(&mut self, window: &WindowRef, now: Instant) {
@@ -979,7 +1031,10 @@ impl App {
             && (!self.expanded || self.page_visible(ExpandedPage::Music)))
             || pacing.compact_overlay_visible
             || pacing.passive_reveal_active
-            || self.right_press_cursor.is_some();
+            || self.right_press_cursor.is_some()
+            || (self.expanded
+                && self.page_visible(ExpandedPage::Timer)
+                && crate::ui::expanded::timer_view::needs_frames());
         if !transition_active
             && !interactive_active
             && !resource_usage_active

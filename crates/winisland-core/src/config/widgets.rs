@@ -3,6 +3,35 @@ use std::sync::atomic::{AtomicU8, Ordering};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum ExpandedPageKind {
+    Music,
+    Widgets,
+    Calendar,
+    Timer,
+}
+
+impl ExpandedPageKind {
+    pub const ALL: [Self; 4] = [Self::Music, Self::Widgets, Self::Calendar, Self::Timer];
+}
+
+pub fn default_expanded_page_order() -> Vec<ExpandedPageKind> {
+    ExpandedPageKind::ALL.to_vec()
+}
+
+pub fn normalize_expanded_page_order(order: &mut Vec<ExpandedPageKind>) -> bool {
+    let mut normalized = Vec::with_capacity(ExpandedPageKind::ALL.len());
+    for page in order.iter().chain(ExpandedPageKind::ALL.iter()) {
+        if !normalized.contains(page) {
+            normalized.push(*page);
+        }
+    }
+    let changed = normalized != *order;
+    *order = normalized;
+    changed
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum WidgetKind {
     Clock,
     Calendar,

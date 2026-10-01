@@ -1,3 +1,4 @@
+use winisland_core::config::ExpandedPageKind;
 use winisland_render::{
     BlurSpec, Image, ImageFit, ImageOptions, Painter, Path, Point, Radius, Rect, Rgba, Sampling,
     StrokeCap, Vec2,
@@ -23,7 +24,19 @@ pub enum ExpandedPage {
     Music,
     Widgets,
     Calendar,
+    Timer,
     Plugin(u64),
+}
+
+impl From<ExpandedPageKind> for ExpandedPage {
+    fn from(kind: ExpandedPageKind) -> Self {
+        match kind {
+            ExpandedPageKind::Music => Self::Music,
+            ExpandedPageKind::Widgets => Self::Widgets,
+            ExpandedPageKind::Calendar => Self::Calendar,
+            ExpandedPageKind::Timer => Self::Timer,
+        }
+    }
 }
 
 pub struct PageAvailability {
@@ -31,19 +44,21 @@ pub struct PageAvailability {
 }
 
 impl ExpandedPage {
-    pub const ALL: [Self; 3] = [Self::Music, Self::Widgets, Self::Calendar];
-
     pub fn is_available(self, availability: &PageAvailability) -> bool {
         match self {
             Self::Music => availability.music,
-            Self::Widgets | Self::Calendar | Self::Plugin(_) => true,
+            Self::Widgets | Self::Calendar | Self::Timer | Self::Plugin(_) => true,
         }
     }
 }
 
-pub fn available_pages(availability: &PageAvailability) -> Vec<ExpandedPage> {
-    ExpandedPage::ALL
-        .into_iter()
+pub fn available_pages(
+    order: &[ExpandedPageKind],
+    availability: &PageAvailability,
+) -> Vec<ExpandedPage> {
+    order
+        .iter()
+        .map(|kind| ExpandedPage::from(*kind))
         .filter(|page| page.is_available(availability))
         .collect()
 }

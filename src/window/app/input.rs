@@ -120,6 +120,37 @@ impl App {
 
         if !self.expanded
             && is_hovering_visible
+            && let Some(hit) = self.compact_overlay.link_hit(
+                rel_x as f32,
+                rel_y as f32,
+                winisland_render::Rect::from_xywh(
+                    current_island_x as f32,
+                    current_island_y as f32,
+                    self.springs.w.value,
+                    self.springs.h.value,
+                ),
+                self.config.compact_scale,
+            )
+        {
+            match hit {
+                crate::ui::compact::LinkHit::Open => {
+                    if let Some(url) = self.compact_overlay.take_link()
+                        && let Err(error) = crate::platform::shell().open_url(&url)
+                    {
+                        log::warn!("Opening copied link failed: {error}");
+                    }
+                }
+                crate::ui::compact::LinkHit::Dismiss => self.compact_overlay.dismiss_link(),
+            }
+            self.idle_timer = Instant::now();
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+            return;
+        }
+
+        if !self.expanded
+            && is_hovering_visible
             && self.compact_overlay.begin_volume_drag(
                 rel_x as f32,
                 rel_y as f32,
@@ -369,6 +400,23 @@ impl App {
                 return;
             }
 
+            if self.page_focused(ExpandedPage::Timer)
+                && let Some(action) = crate::ui::expanded::timer_view::hit_test(
+                    offset_x as f32 + self.page_translation(ExpandedPage::Timer),
+                    island_y as f32,
+                    w as f32,
+                    h as f32,
+                    self.config.expanded_scale,
+                    winisland_render::Point::new(rel_x as f32, rel_y as f32),
+                )
+            {
+                crate::ui::expanded::timer_view::apply_action(action);
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+                return;
+            }
+
             if (rel_y as f64) < island_y + 40.0 * scale {
                 self.expanded_header_press =
                     Some((rel_x + self.geom.win_x, rel_y + self.geom.win_y));
@@ -493,7 +541,8 @@ impl App {
         );
     }
 
-    fn expand(&mut self) {
+    pub(super) fn expand(&mut self) {
+        self.compact_overlay.dismiss_link();
         if self.hide.has_hidden_reason() {
             self.reveal_island();
         }

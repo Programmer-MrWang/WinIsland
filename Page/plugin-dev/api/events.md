@@ -48,7 +48,7 @@ Raw calls take `context, token` first and return `PluginStatus`.
 | `EVENT_TIMER` | `resource` identifies the timer. |
 | `EVENT_RESULT` | `sequence` identifies the request; `code` is `PluginStatus::code()` cast to `u32`. |
 
-All deliveries include their callback resource ID and host-relative monotonic `time_seconds`. Raw payload slices last only for the callback; SDK `Event.data` is an owned copy. `IslandStateV2` contains expansion/visibility/theme flags, current width/height/scale, and page ID: 1 music, 2 widgets, 3 calendar, or the current plugin page's `WidgetId`. Use the surface's logical size for drawing layout.
+All deliveries include their callback resource ID and host-relative monotonic `time_seconds`. Raw payload slices last only for the callback; SDK `Event.data` is an owned copy. `IslandStateV2` contains expansion/visibility/theme flags, current width/height/scale, and page ID: 1 music, 2 widgets, 3 calendar, 4 timer, or the current plugin page's `WidgetId`. Use the surface's logical size for drawing layout.
 
 ## Scheduling and cleanup
 

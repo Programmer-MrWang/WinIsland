@@ -1,10 +1,15 @@
 mod brightness;
+mod link;
 mod notification;
 mod volume;
 
 use winisland_render::{Painter, Rect};
 
+pub use self::link::LinkHit;
+pub(crate) use self::link::extract_link;
+
 use self::brightness::BrightnessMonitor;
+use self::link::LinkIndicator;
 use self::notification::{NotificationIndicator, NotificationMonitor};
 use self::volume::{VolumeIndicator, VolumeMonitor};
 
@@ -36,9 +41,11 @@ pub struct CompactOverlay {
     last_level_is_brightness: bool,
     notification_monitor: NotificationMonitor,
     notification_indicator: NotificationIndicator,
+    link_indicator: LinkIndicator,
 }
 
 enum ActiveCompactOverlay<'a> {
+    Link(&'a LinkIndicator),
     Notification(&'a NotificationIndicator),
     Volume(&'a VolumeIndicator),
     Brightness(&'a VolumeIndicator),
@@ -47,6 +54,7 @@ enum ActiveCompactOverlay<'a> {
 impl ActiveCompactOverlay<'_> {
     fn target_size(&self, base_width: f32, base_height: f32, scale: f32) -> CompactSize {
         match self {
+            Self::Link(_) => LinkIndicator::target_size(base_width, base_height, scale),
             Self::Notification(_) => {
                 NotificationIndicator::target_size(base_width, base_height, scale)
             }
@@ -57,6 +65,7 @@ impl ActiveCompactOverlay<'_> {
 
     fn draw(&self, painter: Painter<'_>, rect: Rect, scale: f32, alpha: f32) {
         match self {
+            Self::Link(indicator) => indicator.draw(painter, rect, scale, alpha),
             Self::Notification(indicator) => indicator.draw(painter, rect, scale, alpha),
             Self::Volume(indicator) => indicator.draw(painter, rect, scale, alpha),
             Self::Brightness(indicator) => indicator.draw_brightness(painter, rect, scale, alpha),
@@ -75,7 +84,30 @@ impl CompactOverlay {
             last_level_is_brightness: false,
             notification_monitor: NotificationMonitor::default(),
             notification_indicator: NotificationIndicator::default(),
+            link_indicator: LinkIndicator::default(),
         }
+    }
+
+    pub fn show_link(&mut self, url: String) {
+        self.link_indicator.show(url);
+    }
+
+    pub fn is_link_prompt_active(&self) -> bool {
+        matches!(self.active(), Some(ActiveCompactOverlay::Link(_)))
+            && self.link_indicator.is_interactive()
+    }
+
+    pub fn link_hit(&self, x: f32, y: f32, rect: Rect, scale: f32) -> Option<LinkHit> {
+        self.is_link_prompt_active()
+            .then(|| self.link_indicator.hit(x, y, rect, scale))
+    }
+
+    pub fn take_link(&mut self) -> Option<String> {
+        self.link_indicator.take_url()
+    }
+
+    pub fn dismiss_link(&mut self) {
+        self.link_indicator.close();
     }
 
     pub fn set_native_volume_flyout_replacement_enabled(&mut self, enabled: bool) {
@@ -255,6 +287,8 @@ impl CompactOverlay {
             Some(ActiveCompactOverlay::Volume(&self.volume_indicator))
         } else if self.brightness_indicator.is_visible() {
             Some(ActiveCompactOverlay::Brightness(&self.brightness_indicator))
+        } else if self.link_indicator.is_visible() {
+            Some(ActiveCompactOverlay::Link(&self.link_indicator))
         } else if self.notification_indicator.is_visible() {
             Some(ActiveCompactOverlay::Notification(
                 &self.notification_indicator,

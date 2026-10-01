@@ -48,7 +48,7 @@ fn start_timer(host: &Host, target: WidgetId) -> Result<CallbackResource, Error>
 | `EVENT_TIMER` | `resource` 标识定时器。 |
 | `EVENT_RESULT` | `sequence` 标识请求；`code` 为 `PluginStatus::code()` 转成 `u32` 后的值。 |
 
-每次投递都有对应回调资源 ID 和宿主相对单调时间 `time_seconds`。原始数据切片仅在回调期间有效；SDK 的 `Event.data` 是自有副本。`IslandStateV2` 包含展开、可见、主题标记，以及当前宽高、缩放和页面 ID：1 为音乐，2 为小组件，3 为日历，插件页则为其 `WidgetId`。绘制布局仍应使用目标自己的逻辑尺寸。
+每次投递都有对应回调资源 ID 和宿主相对单调时间 `time_seconds`。原始数据切片仅在回调期间有效；SDK 的 `Event.data` 是自有副本。`IslandStateV2` 包含展开、可见、主题标记，以及当前宽高、缩放和页面 ID：1 为音乐，2 为小组件，3 为日历，4 为计时器，插件页则为其 `WidgetId`。绘制布局仍应使用目标自己的逻辑尺寸。
 
 ## 调度与清理
 

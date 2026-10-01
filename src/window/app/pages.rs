@@ -9,12 +9,16 @@ use super::{App, IslandLayout};
 
 const WHEEL_COOLDOWN: Duration = Duration::from_millis(260);
 const WHEEL_PIXEL_THRESHOLD: f32 = 40.0;
+const DIAL_PIXEL_STEP: f32 = 20.0;
 
 impl App {
     pub(super) fn expanded_pages(&self) -> Vec<ExpandedPage> {
-        let mut pages = available_pages(&PageAvailability {
-            music: self.music_page_available,
-        });
+        let mut pages = available_pages(
+            &self.config.expanded_page_order,
+            &PageAvailability {
+                music: self.music_page_available,
+            },
+        );
         if let Some(host) = &self.plugin_host {
             pages.extend(
                 host.surfaces()
@@ -220,7 +224,24 @@ impl App {
                 })
                 .flatten();
         let calendar_changed = crate::ui::expanded::calendar_view::set_hover(calendar_hover);
-        if (self.close_hover.value, self.bar_hover.value) != before || calendar_changed {
+        let timer_hover =
+            (interaction_allowed && self.expanded && self.page_focused(ExpandedPage::Timer))
+                .then(|| {
+                    crate::ui::expanded::timer_view::hit_test(
+                        layout.offset_x as f32 + self.page_translation(ExpandedPage::Timer),
+                        layout.island_y as f32,
+                        self.springs.w.value,
+                        self.springs.h.value,
+                        self.config.expanded_scale,
+                        Point::new(rel_x as f32, rel_y as f32),
+                    )
+                })
+                .flatten();
+        let timer_changed = crate::ui::expanded::timer_view::set_hover(timer_hover);
+        if (self.close_hover.value, self.bar_hover.value) != before
+            || calendar_changed
+            || timer_changed
+        {
             window.request_redraw();
         }
     }
@@ -245,6 +266,28 @@ impl App {
             return false;
         }
         let dominant = |x: f32, y: f32| if x.abs() > y.abs() { x } else { -y };
+        let over_timer_dial = self.page_focused(ExpandedPage::Timer)
+            && crate::ui::expanded::timer_view::hit_test(
+                layout.offset_x as f32 + self.page_translation(ExpandedPage::Timer),
+                layout.island_y as f32,
+                self.springs.w.value,
+                self.springs.h.value,
+                self.config.expanded_scale,
+                Point::new(rel_x as f32, rel_y as f32),
+            ) == Some(crate::ui::expanded::timer_view::TimerAction::Dial);
+        if over_timer_dial {
+            let steps = match delta {
+                MouseWheelDelta::Lines { x, y } => -dominant(x, y).signum() as i32,
+                MouseWheelDelta::Pixels { x, y } => {
+                    self.wheel_accumulator += dominant(x as f32, y as f32);
+                    let steps = (self.wheel_accumulator / DIAL_PIXEL_STEP).trunc();
+                    self.wheel_accumulator -= steps * DIAL_PIXEL_STEP;
+                    -steps as i32
+                }
+            };
+            self.idle_timer = Instant::now();
+            return crate::ui::expanded::timer_view::adjust_minutes(steps);
+        }
         let step = match delta {
             MouseWheelDelta::Lines { x, y } => {
                 self.wheel_accumulator = 0.0;
