@@ -4,6 +4,12 @@ on:
   push:
     branches: [ "master", "main" ]
   workflow_dispatch:
+    inputs:
+      docs_only:
+        description: 'Only rebuild and deploy the website'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -43,7 +49,7 @@ jobs:
   build-rust:
     needs: changes
     if: >-
-      (github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true') &&
+      ((github.event_name == 'workflow_dispatch' && !inputs.docs_only) || needs.changes.outputs.rust == 'true') &&
       !contains(github.event.head_commit.message, '[ci-skip]') &&
       !contains(github.event.head_commit.message, '[docs]')
     runs-on: windows-latest
@@ -149,6 +155,12 @@ jobs:
       - name: Install dependencies
         working-directory: Page
         run: npm ci
+      - name: Include latest stable installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p Page/public/download
+          gh release download --repo "${{ github.repository }}" --pattern WinIsland-Setup.exe --dir Page/public/download --clobber
       - name: Build website
         working-directory: Page
         run: npm run build
