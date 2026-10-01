@@ -142,6 +142,7 @@ impl App {
                         }
                         TouchPhase::Cancelled if self.touch_id == Some(touch_id) => {
                             self.touch_id = None;
+                            self.privacy_press = None;
                             self.expanded_press_started_inside = false;
                             self.expanded_header_press = None;
                             self.is_dragging = false;
@@ -458,6 +459,8 @@ impl App {
                                         },
                                         mini_content,
                                         compact_overlay: &self.compact_overlay,
+                                        privacy: &self.privacy_snapshot,
+                                        privacy_indicators: self.privacy_indicator_width() > 0.0,
                                         attention_alpha,
                                     },
                                 )

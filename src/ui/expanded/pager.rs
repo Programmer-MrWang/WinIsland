@@ -23,19 +23,27 @@ pub enum ExpandedPage {
     Music,
     Widgets,
     Calendar,
+    DeviceUsage,
 }
 
 pub struct PageAvailability {
     pub music: bool,
+    pub device_usage: bool,
 }
 
 impl ExpandedPage {
-    pub const ALL: [Self; 3] = [Self::Music, Self::Widgets, Self::Calendar];
+    pub const ALL: [Self; 4] = [
+        Self::Music,
+        Self::Widgets,
+        Self::Calendar,
+        Self::DeviceUsage,
+    ];
 
     pub fn is_available(self, availability: &PageAvailability) -> bool {
         match self {
             Self::Music => availability.music,
             Self::Widgets | Self::Calendar => true,
+            Self::DeviceUsage => availability.device_usage,
         }
     }
 }

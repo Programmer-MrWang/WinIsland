@@ -87,6 +87,23 @@ impl SettingsApp {
             BehaviorAction::Language,
         );
         page.group_end();
+        page.section(tr("section_device_usage"));
+        page.group_start();
+        page.setting(&self.config, AppConfigField::DeviceUsageEnabled, true);
+        if self.config.device_usage_enabled {
+            for field in [
+                AppConfigField::DeviceUsageMicrophone,
+                AppConfigField::DeviceUsageCamera,
+                AppConfigField::DeviceUsageLocation,
+                AppConfigField::DeviceUsageDuringMusic,
+                AppConfigField::DeviceUsageKeepVisible,
+            ] {
+                page.setting(&self.config, field, true);
+            }
+            page.row_label(tr("device_usage_hint"));
+            page.row_label(tr("device_usage_hide_hint"));
+        }
+        page.group_end();
         page.section(tr("section_updates"));
         page.group_start();
         page.setting(&self.config, AppConfigField::CheckForUpdates, true);

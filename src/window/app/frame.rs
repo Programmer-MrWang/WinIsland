@@ -68,6 +68,7 @@ impl App {
         self.handle_tray_events(&window);
         self.handle_hide_hotkey(&window, now);
         self.reload_config_if_changed(&window);
+        self.update_privacy_monitor(&window);
         if self.is_hidden() && !self.can_hide() {
             self.reveal_island();
         }
@@ -577,7 +578,9 @@ impl App {
             }
             window.request_redraw();
         }
-        let is_idle = (!is_hovering_visible || self.components_hidden)
+        let privacy_keeps_visible = self.privacy_keeps_visible();
+        let is_idle = !privacy_keeps_visible
+            && (!is_hovering_visible || self.components_hidden)
             && !self.expanded
             && !self.is_dragging
             && !compact_overlay_visible
@@ -589,14 +592,16 @@ impl App {
             if was_auto_hidden && !self.is_hidden() {
                 self.springs.hide.velocity = -0.65;
             }
-        } else if media_is_playing && !self.components_hidden && self.hide.auto && !self.hide.manual
+        } else if ((media_is_playing && !self.components_hidden) || privacy_keeps_visible)
+            && self.hide.auto
+            && !self.hide.manual
         {
             self.hide.auto = false;
             self.idle_timer = Instant::now();
             if !self.is_hidden() {
                 self.springs.hide.velocity = -0.65;
             }
-            log::info!("Island un-hidden (media playing)");
+            log::info!("Island un-hidden (active content)");
         } else if !self.is_hidden() && is_idle {
             if self.idle_timer.elapsed().as_secs_f32() > self.config.auto_hide_delay
                 && self.prepare_hide(window)
@@ -829,6 +834,7 @@ impl App {
                 self.config.base_width,
                 center_content_width,
             ) * scale
+                + self.privacy_indicator_width()
         } else {
             lyric_target_w
         };

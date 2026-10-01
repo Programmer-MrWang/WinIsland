@@ -93,6 +93,7 @@ impl App {
     }
 
     pub(super) fn handle_press(&mut self, rel_x: i32, rel_y: i32, layout: &IslandLayout) {
+        self.privacy_press = None;
         let island_y = layout.island_y;
         let offset_x = layout.offset_x;
         let current_island_x = layout.current_island_x;
@@ -171,6 +172,27 @@ impl App {
             return;
         }
 
+        if !self.expanded
+            && !self.is_hidden()
+            && is_hovering_visible
+            && self.privacy_indicator_width() > 0.0
+        {
+            let rect = crate::ui::privacy::indicator_rect(
+                &self.privacy_snapshot,
+                winisland_render::Rect::from_xywh(
+                    current_island_x as f32,
+                    layout.stable_island_y as f32,
+                    self.springs.w.value,
+                    self.compact_content_height(),
+                ),
+                self.config.compact_scale,
+            );
+            if rect.contains(winisland_render::Point::new(rel_x as f32, rel_y as f32)) {
+                self.privacy_press = Some((rel_x + self.geom.win_x, rel_y + self.geom.win_y));
+                return;
+            }
+        }
+
         if self.expanded {
             self.expanded_press_started_inside = true;
             self.expanded_header_press = None;
@@ -180,6 +202,21 @@ impl App {
             let w = self.springs.w.value as f64;
             let h = self.springs.h.value as f64;
             let scale = self.config.expanded_scale as f64;
+            if self.page_focused(ExpandedPage::DeviceUsage) {
+                let rect = crate::ui::privacy::settings_rect(
+                    winisland_render::Rect::from_xywh(
+                        offset_x as f32 + self.page_translation(ExpandedPage::DeviceUsage),
+                        island_y as f32,
+                        w as f32,
+                        h as f32,
+                    ),
+                    self.config.expanded_scale,
+                );
+                if rect.contains(winisland_render::Point::new(rel_x as f32, rel_y as f32)) {
+                    self.open_settings();
+                    return;
+                }
+            }
 
             if self.page_focused(ExpandedPage::Music) {
                 let media = self.current_media_info().clone();
@@ -389,6 +426,19 @@ impl App {
 
     pub(super) fn handle_release(&mut self, px: i32, py: i32) {
         self.expanded_press_started_inside = false;
+        if let Some((start_x, start_y)) = self.privacy_press.take() {
+            let threshold = (10.0 * self.config.compact_scale).max(8.0) as i32;
+            if self.config.device_usage_enabled
+                && !self.is_hidden()
+                && (px - start_x).abs() <= threshold
+                && (py - start_y).abs() <= threshold
+            {
+                self.expand();
+                self.current_page = ExpandedPage::DeviceUsage;
+                self.snap_to_current_page();
+            }
+            return;
+        }
         let expanded_header_press = self.expanded_header_press.take();
         if self.compact_overlay.finish_volume_drag() {
             return;

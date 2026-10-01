@@ -11,6 +11,7 @@ mod input;
 mod media;
 mod metrics;
 mod notify;
+mod privacy;
 mod shell;
 mod values;
 mod window;
@@ -24,6 +25,9 @@ pub use input::InputHooks;
 pub use media::{MediaContext, MediaProvider, MediaSessionHandle, ThumbnailError};
 pub use metrics::SystemMetrics;
 pub use notify::{NotificationFeed, NotificationProvider};
+pub use privacy::{
+    DeviceUsage, DeviceUsageState, PrivacyDevice, PrivacyMonitor, PrivacyProvider, PrivacySnapshot,
+};
 pub use shell::{InstanceLock, ShellIntegration};
 pub use values::*;
 pub use window::{NativeSurface, SURFACE_TAG_WIN32_HWND, WindowSystem};
@@ -36,5 +40,6 @@ pub struct Platform {
     pub media: Box<dyn MediaProvider>,
     pub notify: Box<dyn NotificationProvider>,
     pub input: Box<dyn InputHooks>,
+    pub privacy: Box<dyn PrivacyProvider>,
     pub capabilities: Capabilities,
 }
