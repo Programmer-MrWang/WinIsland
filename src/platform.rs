@@ -2,8 +2,8 @@ use parking_lot::Mutex;
 
 use winisland_platform::{
     AudioProvider, Capabilities, DisplayProvider, HitRegion, InputHooks, MediaProvider,
-    MonitorInfo, NotificationProvider, PrivacyProvider, ShellIntegration, SystemMetrics,
-    TrayLabels, TrayTheme, WindowId, WindowPosition, WindowSize, WindowSystem,
+    MonitorInfo, NotificationProvider, ShellIntegration, SystemMetrics, TrayLabels, TrayTheme,
+    WindowId, WindowPosition, WindowSize, WindowSystem,
 };
 use winisland_platform_windows as backend;
 
@@ -154,10 +154,6 @@ pub(crate) fn audio() -> &'static dyn AudioProvider {
 
 pub(crate) fn notify() -> &'static dyn NotificationProvider {
     &backend::WindowsNotifications
-}
-
-pub(crate) fn privacy() -> &'static dyn PrivacyProvider {
-    &backend::WindowsPrivacy
 }
 
 pub(crate) fn media() -> &'static dyn MediaProvider {

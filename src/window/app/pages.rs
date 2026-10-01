@@ -14,7 +14,6 @@ impl App {
     pub(super) fn expanded_pages(&self) -> Vec<ExpandedPage> {
         available_pages(&PageAvailability {
             music: self.music_page_available,
-            device_usage: self.config.device_usage_enabled,
         })
     }
 

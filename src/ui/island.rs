@@ -110,8 +110,6 @@ pub struct DrawIslandParams<'a> {
     pub lyrics: LyricsParams<'a>,
     pub mini_content: Option<MiniContent<'a>>,
     pub compact_overlay: &'a CompactOverlay,
-    pub privacy: &'a winisland_platform::PrivacySnapshot,
-    pub privacy_indicators: bool,
     pub style: StyleParams<'a>,
     pub attention_alpha: f32,
 }
@@ -362,7 +360,6 @@ fn draw_expanded_layer(
         plugin_widgets: style.plugin_widgets,
         plugin_frames: style.plugin_frames,
         plugin_host: style.plugin_host,
-        privacy: params.privacy,
     })
 }
 
@@ -377,11 +374,6 @@ fn draw_compact_layer(
     let lyrics = &params.lyrics;
     let style = &params.style;
     let has_mini_content = params.mini_content.is_some();
-    let privacy_width = if params.privacy_indicators && layout.compact_widget_opacity > 0.0 {
-        crate::ui::privacy::indicator_width(params.privacy) * layout.compact_scale
-    } else {
-        0.0
-    };
     let center_occupied = crate::ui::widget::compact::has_center_widget(
         style.compact_widget_layout,
         has_mini_content,
@@ -402,7 +394,7 @@ fn draw_compact_layer(
         painter,
         content: visible_mini_content,
         mini_alpha: alpha,
-        current_w: (layout.current_w - left_extension - right_extension - privacy_width).max(0.0),
+        current_w: (layout.current_w - left_extension - right_extension).max(0.0),
         global_scale: layout.compact_scale,
         media: params.media.media,
         offset_x: layout.island_x + left_extension,
@@ -429,27 +421,13 @@ fn draw_compact_layer(
         Rect::from_xywh(
             layout.island_x,
             layout.stable_island_y,
-            (layout.current_w - privacy_width).max(0.0),
+            layout.current_w,
             layout.base_h,
         ),
         layout.compact_scale,
         (alpha * layout.compact_widget_opacity * f32::from(u8::MAX)) as u8,
         has_mini_content,
     );
-    if privacy_width > 0.0 {
-        crate::ui::privacy::draw_indicators(
-            painter,
-            params.privacy,
-            Rect::from_xywh(
-                layout.island_x,
-                layout.stable_island_y,
-                layout.current_w,
-                layout.base_h,
-            ),
-            layout.compact_scale,
-            alpha * layout.compact_widget_opacity,
-        );
-    }
 }
 
 fn draw_pager(

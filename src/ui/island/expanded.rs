@@ -38,7 +38,6 @@ pub(super) struct ExpandedContentParams<'a> {
     pub(super) plugin_widgets: &'a winisland_core::widgets::WidgetManager,
     pub(super) plugin_frames: &'a HashMap<u64, PreparedFrame>,
     pub(super) plugin_host: Option<&'a PluginHost>,
-    pub(super) privacy: &'a winisland_platform::PrivacySnapshot,
 }
 
 pub(super) fn draw_expanded_content(params: ExpandedContentParams<'_>) -> bool {
@@ -71,7 +70,6 @@ pub(super) fn draw_expanded_content(params: ExpandedContentParams<'_>) -> bool {
         plugin_widgets,
         plugin_frames,
         plugin_host,
-        privacy,
     } = params;
     let mut widget_animating = false;
     if expanded_alpha_f > 0.01 {
@@ -136,13 +134,6 @@ pub(super) fn draw_expanded_content(params: ExpandedContentParams<'_>) -> bool {
                     alpha,
                     global_scale,
                     text_color,
-                ),
-                ExpandedPage::DeviceUsage => crate::ui::privacy::draw_page(
-                    painter,
-                    privacy,
-                    winisland_render::Rect::from_xywh(offset_x, offset_y, current_w, current_h),
-                    global_scale,
-                    alpha,
                 ),
             }
             painter.restore();

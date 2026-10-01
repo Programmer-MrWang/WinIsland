@@ -144,22 +144,6 @@ pub struct AppConfig {
     pub right_click_drag: bool,
     #[setting(toggle)]
     pub notification_display: bool,
-    #[setting(toggle)]
-    pub device_usage_enabled: bool,
-    #[educe(Default = true)]
-    #[setting(toggle)]
-    pub device_usage_microphone: bool,
-    #[educe(Default = true)]
-    #[setting(toggle)]
-    pub device_usage_camera: bool,
-    #[educe(Default = true)]
-    #[setting(toggle)]
-    pub device_usage_location: bool,
-    #[educe(Default = true)]
-    #[setting(toggle)]
-    pub device_usage_during_music: bool,
-    #[setting(toggle)]
-    pub device_usage_keep_visible: bool,
     #[educe(Default = true)]
     #[setting(toggle)]
     pub replace_native_volume_flyout: bool,

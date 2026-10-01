@@ -29,7 +29,6 @@ mod frame;
 mod input;
 mod layout;
 mod pages;
-mod privacy;
 mod startup;
 mod system;
 mod v2;
@@ -70,9 +69,6 @@ pub struct App {
     smtc: SmtcListener,
     audio: AudioProcessor,
     compact_overlay: CompactOverlay,
-    privacy_monitor: Box<dyn winisland_platform::PrivacyMonitor>,
-    privacy_snapshot: winisland_platform::PrivacySnapshot,
-    privacy_press: Option<(i32, i32)>,
     config: AppConfig,
     expanded: bool,
     expanded_press_started_inside: bool,
@@ -212,10 +208,6 @@ impl Default for App {
                 plugin_host.as_ref().map(|host| host.lyrics_bridge()),
             ),
             audio: AudioProcessor::new(),
-            privacy_monitor: crate::platform::privacy()
-                .open_monitor(std::sync::Arc::new(crate::platform::wake)),
-            privacy_snapshot: winisland_platform::PrivacySnapshot::default(),
-            privacy_press: None,
             compact_overlay: CompactOverlay::new(
                 config.replace_native_volume_flyout,
                 config.brightness_overlay_enabled,

@@ -17,12 +17,7 @@ impl App {
             &self.config.compact_widget_layout,
             self.config.base_width,
             Some(MAX_LYRIC_WIDTH),
-        ) * compact_scale
-            + if self.config.device_usage_enabled {
-                crate::ui::privacy::MAX_INDICATOR_WIDTH * compact_scale
-            } else {
-                0.0
-            };
+        ) * compact_scale;
         let compact_overlay = crate::ui::compact::CompactOverlay::maximum_size(
             self.config.base_width,
             self.config.base_height,

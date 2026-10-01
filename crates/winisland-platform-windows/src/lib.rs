@@ -10,7 +10,6 @@ mod input;
 mod media;
 mod metrics;
 mod notify;
-mod privacy;
 mod process;
 mod shell;
 pub mod window;
@@ -21,7 +20,6 @@ pub use input::WindowsInput;
 pub use media::WindowsMedia;
 pub use metrics::WindowsMetrics;
 pub use notify::WindowsNotifications;
-pub use privacy::WindowsPrivacy;
 pub use shell::WindowsShell;
 
 use winisland_platform::{AudioProvider, Capabilities, MediaProvider, Platform, ShellIntegration};
@@ -52,7 +50,6 @@ impl WindowsPlatform {
             media: Box::new(WindowsMedia),
             notify: Box::new(WindowsNotifications),
             input: Box::new(WindowsInput),
-            privacy: Box::new(WindowsPrivacy),
             capabilities: Self::probe_capabilities(),
         }
     }
