@@ -286,16 +286,26 @@ impl SettingsApi {
 
 impl TextApi {
     pub fn measure(&self, text: &str, size: f32, family: &str) -> Result<TextMetricsV2, Error> {
+        let mut style = super::TextStyle::default_at(size);
+        style.family = family.to_owned();
+        self.measure_style(text, &style)
+    }
+
+    pub fn measure_style(
+        &self,
+        text: &str,
+        style: &super::TextStyle,
+    ) -> Result<TextMetricsV2, Error> {
         let table = self._host.query::<TextApiV2>(abi::IFACE_TEXT)?;
         let measure = table
             .measure
             .ok_or(Error::MissingFunction("text.measure"))?;
         let style = TextStyleV2 {
-            size,
-            weight: 400,
-            italic: 0,
+            size: style.size,
+            weight: style.weight,
+            italic: u8::from(style.italic),
             reserved: 0,
-            family: Utf8Slice::borrowed(family),
+            family: Utf8Slice::borrowed(&style.family),
         };
         let mut metrics = TextMetricsV2::default();
         // SAFETY: Borrowed text and style remain valid during the host call.
