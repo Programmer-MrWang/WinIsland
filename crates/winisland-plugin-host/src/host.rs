@@ -1,10 +1,11 @@
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::time::Duration;
 
 use winisland_core::widgets::PluginWidget;
-use winisland_plugin_api::abi::{ABI_VERSION_2, PluginStatus};
+use winisland_plugin_api::abi::{ABI_VERSION_2, PluginDescriptorV2, PluginStatus};
 use winisland_plugin_api::types::v2::WidgetId;
 use winisland_plugin_package::activate::read_manifest_file;
 use winisland_plugin_package::manifest::PluginManifest;
@@ -25,6 +26,7 @@ pub use media::MediaSnapshot;
 
 pub struct PluginHost {
     entries: RefCell<Vec<PluginInstance>>,
+    builtins: RefCell<HashMap<String, PluginDescriptorV2>>,
     runtime: Pin<Box<HostRuntime>>,
     plugin_dir: PathBuf,
     lyrics_bridge: LyricsBridge,
@@ -32,6 +34,20 @@ pub struct PluginHost {
 }
 
 impl PluginHost {
+    pub fn surface_id(&self, plugin_id: &str, key: &str) -> Option<u64> {
+        self.surfaces().into_iter().find_map(|(id, spec)| {
+            if spec.key != winisland_plugin_api::str_to_fixed(key) {
+                return None;
+            }
+            let token = self
+                .runtime
+                .resources
+                .owner(ResourceKind::Widget, id)
+                .ok()?;
+            let plugin = self.runtime.registry.get(token).ok()?;
+            (plugin.id == plugin_id).then_some(id)
+        })
+    }
     pub fn surfaces(&self) -> Vec<(u64, winisland_plugin_api::SurfaceSpecV2)> {
         let Ok(state) = self.runtime.state.lock() else {
             return Vec::new();
@@ -80,6 +96,7 @@ impl PluginHost {
             .map_err(|error| PluginHostError::Io(format!("{}: {error}", plugin_dir.display())))?;
         Ok(Self {
             entries: RefCell::new(Vec::new()),
+            builtins: RefCell::new(HashMap::new()),
             runtime: HostRuntime::new(host_build, plugin_dir.clone()),
             plugin_dir,
             lyrics_bridge: LyricsBridge::default(),
@@ -237,6 +254,12 @@ impl PluginHost {
     ) -> Result<(), PluginHostError> {
         let library = PluginLibrary::open(path)?;
         let metadata = library.metadata().clone();
+        if self.is_builtin(&metadata.id) {
+            return Err(PluginHostError::Invalid(format!(
+                "plugin '{}' is reserved for a built-in plugin",
+                metadata.id
+            )));
+        }
         if let Some(manifest) = manifest {
             for (field, packaged, declared) in [
                 ("id", manifest.id.as_str(), metadata.id.as_str()),
@@ -256,6 +279,70 @@ impl PluginHost {
                 }
             }
         }
+        self.load_instance(library)
+    }
+
+    pub fn register_builtin(&self, descriptor: PluginDescriptorV2) -> Result<(), PluginHostError> {
+        let library = PluginLibrary::builtin(descriptor)?;
+        let id = library.metadata().id.clone();
+        if self.is_builtin(&id)
+            || self
+                .entries
+                .borrow()
+                .iter()
+                .any(|entry| entry.library().metadata().id == id)
+        {
+            return Err(PluginHostError::Invalid(format!(
+                "plugin '{id}' is already registered"
+            )));
+        }
+        self.builtins.borrow_mut().insert(id.clone(), descriptor);
+        if disabled_plugin_ids(&self.plugin_dir).contains(&id) {
+            return Ok(());
+        }
+        self.load_instance(library)
+    }
+
+    pub fn is_builtin(&self, id: &str) -> bool {
+        self.builtins.borrow().contains_key(id)
+    }
+
+    pub fn set_builtin_enabled(&self, id: &str, enabled: bool) -> Result<(), PluginHostError> {
+        let descriptor =
+            self.builtins.borrow().get(id).copied().ok_or_else(|| {
+                PluginHostError::Invalid(format!("unknown built-in plugin '{id}'"))
+            })?;
+        let was_disabled = disabled_plugin_ids(&self.plugin_dir).contains(id);
+        set_plugin_disabled(&self.plugin_dir, id, !enabled)
+            .map_err(|error| PluginHostError::Io(error.to_string()))?;
+        let result = if enabled {
+            if self
+                .entries
+                .borrow()
+                .iter()
+                .any(|entry| entry.library().metadata().id == id)
+            {
+                Ok(())
+            } else {
+                PluginLibrary::builtin(descriptor).and_then(|library| self.load_instance(library))
+            }
+        } else {
+            self.unload_if_loaded(id).map(|_| ())
+        };
+        if let Err(error) = result {
+            if let Err(rollback) = set_plugin_disabled(&self.plugin_dir, id, was_disabled) {
+                return Err(PluginHostError::Io(format!(
+                    "{error}; could not restore enabled state: {rollback}"
+                )));
+            }
+            return Err(error);
+        }
+        self.runtime.extensions.changed();
+        Ok(())
+    }
+
+    fn load_instance(&self, library: PluginLibrary) -> Result<(), PluginHostError> {
+        let metadata = library.metadata().clone();
         if disabled_plugin_ids(&self.plugin_dir).contains(&metadata.id) {
             return Err(PluginHostError::Invalid(format!(
                 "plugin '{}' is disabled",
@@ -283,6 +370,7 @@ impl PluginHost {
             .parent()
             .unwrap_or(&self.plugin_dir)
             .to_path_buf();
+        // SAFETY: The library owns its callback code and the pinned host outlives the instance.
         let instance =
             unsafe { PluginInstance::create(library, token, self.runtime.host_api(), marker_dir) };
         let mut instance = match instance {
@@ -323,6 +411,11 @@ impl PluginHost {
         manifest: &PluginManifest,
         staging: &Path,
     ) -> Result<(), PluginHostError> {
+        if self.is_builtin(&manifest.id) {
+            return Err(PluginHostError::Invalid(
+                "built-in plugins cannot be replaced".into(),
+            ));
+        }
         manifest
             .validate(ABI_VERSION_2)
             .map_err(PluginHostError::Invalid)?;

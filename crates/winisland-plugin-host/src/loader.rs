@@ -15,7 +15,7 @@ use crate::PluginHostError;
 
 pub struct PluginLibrary {
     pub(crate) descriptor: PluginDescriptorV2,
-    pub(crate) library: ManuallyDrop<Library>,
+    library: Option<ManuallyDrop<Library>>,
     path: PathBuf,
     metadata: PluginMetadata,
 }
@@ -84,6 +84,23 @@ impl PluginLibrary {
         }
         // SAFETY: The size check covers the complete current descriptor layout.
         let descriptor = unsafe { std::ptr::read_unaligned(descriptor_ptr) };
+        Self::from_descriptor(descriptor, Some(library), path)
+    }
+
+    pub fn builtin(descriptor: PluginDescriptorV2) -> Result<Self, PluginHostError> {
+        Self::from_descriptor(descriptor, None, PathBuf::new())
+    }
+
+    fn from_descriptor(
+        descriptor: PluginDescriptorV2,
+        library: Option<Library>,
+        path: PathBuf,
+    ) -> Result<Self, PluginHostError> {
+        if descriptor.struct_size < std::mem::size_of::<PluginDescriptorV2>() as u32 {
+            return Err(PluginHostError::Invalid(
+                "truncated plugin descriptor".into(),
+            ));
+        }
         if descriptor.abi_version != ABI_VERSION_2 {
             return Err(PluginHostError::Invalid(format!(
                 "{} uses unsupported ABI version {}",
@@ -121,7 +138,7 @@ impl PluginLibrary {
         }
         Ok(Self {
             descriptor,
-            library: ManuallyDrop::new(library),
+            library: library.map(ManuallyDrop::new),
             path,
             metadata,
         })
@@ -142,7 +159,9 @@ impl PluginLibrary {
 
 impl Drop for PluginLibrary {
     fn drop(&mut self) {
-        // SAFETY: PluginLibrary owns the DLL and has no active instance at this point.
-        unsafe { ManuallyDrop::drop(&mut self.library) };
+        if let Some(library) = &mut self.library {
+            // SAFETY: PluginLibrary owns the DLL and has no active instance at this point.
+            unsafe { ManuallyDrop::drop(library) };
+        }
     }
 }
