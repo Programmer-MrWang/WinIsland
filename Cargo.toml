@@ -10,6 +10,7 @@ members = [
     "crates/settings-schema-derive",
     "crates/winisland-core",
     "crates/winisland-plugin-api",
+    "crates/winisland-plugin-calendar",
     "crates/winisland-plugin-package",
     "crates/winisland-plugin-host",
     "crates/winisland-render",
@@ -46,6 +47,7 @@ log = { version = "0.4", features = ["std"] }
 lrc = "0.2.0"
 parking_lot = "0.12"
 winisland-plugin-api = { path = "crates/winisland-plugin-api" }
+winisland-plugin-calendar = { path = "crates/winisland-plugin-calendar" }
 winisland-plugin-package = { path = "crates/winisland-plugin-package", features = ["marketplace"] }
 winisland-plugin-host = { path = "crates/winisland-plugin-host" }
 winisland-core = { path = "crates/winisland-core" }

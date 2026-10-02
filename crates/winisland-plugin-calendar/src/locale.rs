@@ -1,4 +1,4 @@
-use winisland_platform::LunarDate;
+use winisland_plugin_api::sdk::LunarDate;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum Region {
@@ -129,7 +129,7 @@ impl Region {
         self,
         year: u16,
         month: u16,
-        lunar: impl Fn(u16, u16, u16) -> Option<LunarDate>,
+        mut lunar: impl FnMut(u16, u16, u16) -> Option<LunarDate>,
     ) -> Vec<Holiday> {
         let mut holidays = Vec::new();
         let mut add = |day: u16, name: &'static str| holidays.push(Holiday { day, name });
@@ -212,10 +212,13 @@ impl Region {
                 } else {
                     (year, month + 1)
                 };
-                let lunar_days: Vec<Option<LunarDate>> = (1..=days)
-                    .map(|day| lunar(year, month, day))
-                    .chain(std::iter::once(lunar(next_year, next_month, 1)))
-                    .collect();
+                let mut lunar_days: Vec<Option<LunarDate>> =
+                    (1..=days).map(|day| lunar(year, month, day)).collect();
+                lunar_days.push(if next_year <= 9999 {
+                    lunar(next_year, next_month, 1)
+                } else {
+                    None
+                });
                 for day in 1..=days {
                     let Some(date) = lunar_days[usize::from(day - 1)] else {
                         continue;

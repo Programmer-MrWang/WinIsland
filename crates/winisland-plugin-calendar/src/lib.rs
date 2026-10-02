@@ -1,3 +1,4 @@
+mod geometry;
 mod locale;
 
 use std::cell::RefCell;
@@ -7,14 +8,15 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use winisland_plugin_api::sdk::{
-    CallbackResource, DrawListBuilder, Error, Event, Host, Size, Surface, TextStyle,
+    CallbackResource, DrawListBuilder, Error, Event, Host, Rgba, Size, Surface, SystemApi,
+    TextStyle,
 };
 use winisland_plugin_api::*;
-use winisland_render::{Point, Rect, Rgba, Vec2};
 
+use self::geometry::{Point, Rect, Vec2};
 use self::locale::{Holiday, Region, days_in_month, weekday};
 
-const ACCENT: Rgba = Rgba::from_rgb(255, 69, 58);
+const ACCENT: Rgba = Rgba::from_argb(0xffff_453a);
 const PANEL_RATIO: f32 = 0.36;
 const DIVIDER_GAP: f32 = 16.0;
 const HEADER_GAP: f32 = 4.0;
@@ -36,11 +38,11 @@ pub fn descriptor() -> PluginDescriptorV2 {
     PluginDescriptorV2 {
         struct_size: std::mem::size_of::<PluginDescriptorV2>() as u32,
         abi_version: ABI_VERSION_2,
-        capabilities: CAP_SURFACE | CAP_INPUT | CAP_EVENTS | CAP_TEXT,
+        capabilities: CAP_SURFACE | CAP_INPUT | CAP_EVENTS | CAP_TEXT | CAP_SYSTEM,
         metadata: PluginMetadataC::new(
             ID,
             "Calendar",
-            winisland_core::config::APP_VERSION,
+            env!("CARGO_PKG_VERSION"),
             "WinIsland",
             "Calendar with month navigation and regional holidays.",
         ),
@@ -153,7 +155,7 @@ impl CalendarTarget {
             clips: 0,
             error: None,
         };
-        draw_calendar_page(&mut painter, 0.0, 0.0, width, height, 255, 1.0, Rgba::WHITE);
+        draw_calendar_page(&mut painter, 0.0, 0.0, width, height, 255, 1.0, Rgba::WHITE)?;
         if let Some(error) = painter.error {
             return Err(error);
         }
@@ -213,9 +215,11 @@ unsafe extern "C" fn create(
     // SAFETY: The host supplies a live create descriptor and writable handle output.
     let info = unsafe { &*info };
     // SAFETY: The host keeps its instance table allocated through shutdown and destruction.
-    let result =
-        unsafe { Host::from_raw(info.host_api, info.plugin_token) }.and_then(Calendar::new);
-    match result {
+    let host = match unsafe { Host::from_raw(info.host_api, info.plugin_token) } {
+        Ok(host) => host,
+        Err(_) => return PluginStatus::Internal,
+    };
+    match Calendar::new(host.clone()) {
         Ok(calendar) => {
             // SAFETY: The checked output receives an owned instance until destroy is called.
             unsafe {
@@ -224,7 +228,8 @@ unsafe extern "C" fn create(
             PluginStatus::Ok
         }
         Err(error) => {
-            log::error!("Cannot create built-in calendar: {error}");
+            host.log()
+                .write(3, &format!("Cannot create built-in calendar: {error}"));
             PluginStatus::Internal
         }
     }
@@ -249,6 +254,9 @@ unsafe extern "C" fn destroy(handle: *mut c_void) {
 }
 
 unsafe extern "C" fn tick(handle: *mut c_void, _: WidgetId, _: f64) -> PluginStatus {
+    if handle.is_null() {
+        return PluginStatus::InvalidArgument;
+    }
     // SAFETY: The host worker holds the live instance until it is joined before shutdown.
     let calendar = unsafe { &*handle.cast::<Calendar>() };
     match calendar
@@ -259,7 +267,12 @@ unsafe extern "C" fn tick(handle: *mut c_void, _: WidgetId, _: f64) -> PluginSta
     {
         Ok(()) => PluginStatus::Ok,
         Err(error) => {
-            log::error!("Built-in calendar tick failed: {error}");
+            if let Some(target) = &calendar.target {
+                target
+                    .host
+                    .log()
+                    .write(3, &format!("Built-in calendar tick failed: {error}"));
+            }
             PluginStatus::Internal
         }
     }
@@ -274,10 +287,6 @@ struct CalendarPainter<'a> {
 
 fn draw_rect(rect: Rect) -> winisland_plugin_api::sdk::Rect {
     winisland_plugin_api::sdk::Rect::new(rect.left, rect.top, rect.width(), rect.height())
-}
-
-fn draw_color(color: Rgba) -> winisland_plugin_api::sdk::Rgba {
-    winisland_plugin_api::sdk::Rgba::from_argb(color.to_argb())
 }
 
 impl CalendarPainter<'_> {
@@ -316,16 +325,15 @@ impl CalendarPainter<'_> {
             bounds.width(),
             metrics.height.max(size),
         );
-        self.list.text(text, rect, &style, draw_color(color));
+        self.list.text(text, rect, &style, color);
     }
 
     fn fill_rect(&mut self, rect: Rect, color: Rgba) {
-        self.list.fill_rect(draw_rect(rect), draw_color(color));
+        self.list.fill_rect(draw_rect(rect), color);
     }
 
     fn fill_circle(&mut self, center: Point, radius: f32, color: Rgba) {
-        self.list
-            .fill_circle(center.x, center.y, radius, draw_color(color));
+        self.list.fill_circle(center.x, center.y, radius, color);
     }
 
     fn stroke_line(&mut self, from: Point, to: Point, width: f32, color: Rgba) {
@@ -348,7 +356,7 @@ impl CalendarPainter<'_> {
         self.list.fill_round_rect(
             winisland_plugin_api::sdk::Rect::new(-radius, -radius, length + width, width),
             radius,
-            draw_color(color),
+            color,
         );
         self.list.pop_transform();
     }
@@ -394,7 +402,7 @@ fn draw_widget_text_centered(
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum CalendarAction {
+enum CalendarAction {
     PreviousYear,
     PreviousMonth,
     NextMonth,
@@ -492,7 +500,7 @@ fn ease_out_back(t: f32) -> f32 {
     1.0 + (OVERSHOOT + 1.0) * shifted.powi(3) + OVERSHOOT * shifted.powi(2)
 }
 
-pub fn apply_action(action: CalendarAction) {
+fn apply_action(action: CalendarAction) {
     MOTION.with(|motion| {
         let mut motion = motion.borrow_mut();
         let now = Instant::now();
@@ -520,7 +528,7 @@ pub fn apply_action(action: CalendarAction) {
     });
 }
 
-pub fn reset_to_today() {
+fn reset_to_today() {
     MOTION.with(|motion| {
         let mut motion = motion.borrow_mut();
         motion.offset = 0;
@@ -532,7 +540,7 @@ pub fn reset_to_today() {
     });
 }
 
-pub fn set_hover(action: Option<CalendarAction>) -> bool {
+fn set_hover(action: Option<CalendarAction>) -> bool {
     MOTION.with(|motion| {
         let mut motion = motion.borrow_mut();
         let changed = motion.hover_target != action;
@@ -541,7 +549,7 @@ pub fn set_hover(action: Option<CalendarAction>) -> bool {
     })
 }
 
-pub fn is_animating() -> bool {
+fn is_animating() -> bool {
     MOTION.with(|motion| {
         let motion = motion.borrow();
         let now = Instant::now();
@@ -622,21 +630,39 @@ fn month_at(year: u16, month: u16, offset: i32) -> (u16, u16) {
     )
 }
 
-fn holidays_for(region: Region, year: u16, month: u16) -> Rc<Vec<Holiday>> {
+fn holidays_for(
+    system: &SystemApi,
+    region: Region,
+    year: u16,
+    month: u16,
+) -> Result<Rc<Vec<Holiday>>, Error> {
     HOLIDAYS.with(|cell| {
         let mut cache = cell.borrow_mut();
         let key = (region, year, month);
         if let Some((_, holidays)) = cache.iter().find(|(entry, _)| *entry == key) {
-            return holidays.clone();
+            return Ok(holidays.clone());
         }
+        let mut failure = None;
         let holidays = Rc::new(region.holidays(year, month, |y, m, d| {
-            crate::platform::shell().lunar_date(y, m, d)
+            if failure.is_some() {
+                return None;
+            }
+            match system.lunar_date(y, m, d) {
+                Ok(date) => date,
+                Err(error) => {
+                    failure = Some(error);
+                    None
+                }
+            }
         }));
+        if let Some(error) = failure {
+            return Err(error);
+        }
         if cache.len() >= HOLIDAY_CACHE_LIMIT {
             cache.remove(0);
         }
         cache.push((key, holidays.clone()));
-        holidays
+        Ok(holidays)
     })
 }
 
@@ -891,13 +917,14 @@ fn draw_calendar_page(
     alpha: u8,
     scale: f32,
     text_color: Rgba,
-) {
+) -> Result<(), Error> {
     if alpha <= 20 {
-        return;
+        return Ok(());
     }
     let motion = advance_motion();
-    let today = crate::platform::shell().local_datetime();
-    let region = Region::from_lang(&winisland_core::i18n::current_lang());
+    let system = painter.host.system()?;
+    let today = system.local_datetime()?;
+    let region = Region::from_lang(&system.current_language()?);
     let (year, month) = month_at(today.year, today.month, motion.offset);
     let is_current_month = year == today.year && month == today.month;
     let previous_month = motion
@@ -911,7 +938,7 @@ fn draw_calendar_page(
         let mut cache = cell.borrow_mut();
         let key = (region, (today.year, today.month, today.day), (year, month));
         if cache.as_ref().is_none_or(|text| text.key != key) {
-            let holidays = holidays_for(region, year, month);
+            let holidays = holidays_for(&system, region, year, month)?;
             let holiday_dates = holidays
                 .iter()
                 .map(|holiday| region.short_date(month, holiday.day))
@@ -926,7 +953,7 @@ fn draw_calendar_page(
             });
         }
         let Some(text) = cache.as_ref() else {
-            return;
+            return Ok(());
         };
 
         let panel_w = layout.panel_w;
@@ -1176,7 +1203,7 @@ fn draw_calendar_page(
         painter.clip_rect(days_area);
         if let Some((from_year, from_month)) = previous_month {
             let (shift, opacity) = slide(motion.transition, days_travel, false);
-            let old_holidays = holidays_for(region, from_year, from_month);
+            let old_holidays = holidays_for(&system, region, from_year, from_month)?;
             let old_style = DayStyle {
                 today_scale: 1.0,
                 ..style
@@ -1202,5 +1229,6 @@ fn draw_calendar_page(
             opacity,
         );
         painter.restore_to(save_count);
-    });
+        Ok(())
+    })
 }

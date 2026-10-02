@@ -1,5 +1,6 @@
-pub mod calendar;
+pub use winisland_plugin_calendar as calendar;
 pub mod inventory;
+pub(crate) mod system;
 
 pub(crate) struct BuiltinPlugin {
     pub descriptor: winisland_plugin_api::PluginDescriptorV2,

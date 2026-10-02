@@ -181,6 +181,12 @@ impl Default for App {
         let plugin_mgr = PluginManager::default();
         let plugin_host = match PluginHost::new(plugin_mgr.plugin_dir.clone(), 1) {
             Ok(host) => {
+                if let Err(status) = host
+                    .runtime()
+                    .set_system_services(crate::plugin::system::services())
+                {
+                    log::error!("Cannot initialize plugin system services: {status:?}");
+                }
                 host.runtime()
                     .extensions
                     .set_wake(std::sync::Arc::new(crate::platform::wake));
