@@ -13,7 +13,9 @@ use winisland_plugin_api::types::v2::settings::{
     SettingsChangedFnV2, SettingsItemV2, SettingsOptionV2,
 };
 use winisland_plugin_api::types::v2::widget::WidgetSpecV2;
-use winisland_plugin_api::types::v2::{HostStateChangedFnV2, PluginToken, WidgetId};
+use winisland_plugin_api::types::v2::{
+    HostStateChangedFnV2, LocalDateTimeV2, LunarDateV2, PluginToken, WidgetId,
+};
 use winisland_render::Image;
 
 use crate::abi::AbiTables;
@@ -30,7 +32,14 @@ pub struct HostRuntime {
     pub(crate) state: Mutex<ServiceState>,
     pub(crate) store_root: PathBuf,
     pub(crate) store_lock: Mutex<()>,
+    pub(crate) system_services: Mutex<Option<SystemServices>>,
     _pin: PhantomPinned,
+}
+
+#[derive(Clone, Copy)]
+pub struct SystemServices {
+    pub local_datetime: fn() -> LocalDateTimeV2,
+    pub lunar_date: fn(u16, u16, u16) -> Option<LunarDateV2>,
 }
 
 pub(crate) struct ServiceState {
@@ -155,6 +164,7 @@ impl HostRuntime {
             }),
             store_root,
             store_lock: Mutex::new(()),
+            system_services: Mutex::new(None),
             _pin: PhantomPinned,
         });
         // SAFETY: The Box allocation is pinned before binding its address into the tables.
@@ -166,6 +176,14 @@ impl HostRuntime {
 
     pub fn host_api(&self) -> *const PluginHostV2 {
         &self.tables.host
+    }
+
+    pub fn set_system_services(&self, services: SystemServices) -> Result<(), PluginStatus> {
+        *self
+            .system_services
+            .lock()
+            .map_err(|_| PluginStatus::Internal)? = Some(services);
+        Ok(())
     }
 
     pub fn set_host_state(

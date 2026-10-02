@@ -6,12 +6,13 @@ use winisland_plugin_api::{
 
 use winisland_plugin_api::abi::{
     self, ContextApiV2, HostStateApiV2, I18nApiV2, ImageApiV2, LogApiV2, LyricsTransformApiV2,
-    MediaApiV2, PluginHostV2, SettingsApiV2, StoreApiV2, TablePrefix, TextApiV2, WidgetApiV2,
+    MediaApiV2, PluginHostV2, SettingsApiV2, StoreApiV2, SystemApiV2, TablePrefix, TextApiV2,
+    WidgetApiV2,
 };
 
 use crate::runtime::HostRuntime;
 use crate::services::{
-    context, host_state, i18n, image, log, lyrics, media, settings, store, text, widget,
+    context, host_state, i18n, image, log, lyrics, media, settings, store, system, text, widget,
 };
 
 pub(crate) struct AbiTables {
@@ -32,6 +33,7 @@ pub(crate) struct AbiTables {
     surface: SurfaceApiV2,
     events: EventsApiV2,
     media_session: MediaSessionApiV2,
+    system: SystemApiV2,
 }
 
 fn prefix<T>(version: u32) -> TablePrefix {
@@ -45,6 +47,12 @@ fn prefix<T>(version: u32) -> TablePrefix {
 impl AbiTables {
     pub fn new(host_build: u32) -> Self {
         Self {
+            system: SystemApiV2 {
+                prefix: prefix::<SystemApiV2>(abi::IFACE_VERSION_1),
+                local_datetime: Some(system::local_datetime),
+                lunar_date: Some(system::lunar_date),
+                current_language: Some(system::current_language),
+            },
             input: InputApiV2 {
                 prefix: prefix::<InputApiV2>(abi::IFACE_VERSION_1),
                 set_regions: Some(extensions::set_regions),
@@ -155,6 +163,7 @@ impl AbiTables {
     }
 
     pub fn bind(&mut self, context: *mut c_void) {
+        self.system.prefix.context = context;
         self.input.prefix.context = context;
         self.command.prefix.context = context;
         self.surface.prefix.context = context;
@@ -187,6 +196,7 @@ unsafe extern "C" fn query(
     let runtime = unsafe { &*context.cast::<HostRuntime>() };
     let tables = &runtime.tables;
     match interface {
+        abi::IFACE_SYSTEM => (&tables.system as *const SystemApiV2).cast(),
         abi::IFACE_INPUT => (&tables.input as *const InputApiV2).cast(),
         abi::IFACE_COMMAND => (&tables.command as *const CommandApiV2).cast(),
         abi::IFACE_SURFACE => (&tables.surface as *const SurfaceApiV2).cast(),

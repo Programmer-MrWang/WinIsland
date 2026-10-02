@@ -8,6 +8,7 @@ pub mod lyrics;
 pub mod media;
 pub mod settings;
 pub mod store;
+pub mod system;
 pub mod text;
 pub mod widget;
 
