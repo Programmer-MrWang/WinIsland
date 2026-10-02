@@ -2,6 +2,33 @@
 
 This changelog lists `winisland-plugin-api` versions. The website displays this file as its plugin API update log.
 
+## 0.9.1 - Oct 2, 2026
+
+Added:
+
+- `TextApi::measure_style(text, &TextStyle)` in the Rust SDK for measuring text with a matching size, weight, italic style, and font family
+
+Changed:
+
+- `TextApi::measure` delegates to the styled helper while retaining its weight-400, upright behavior
+- No changes to the ABI v2 entry point, descriptor, service tables, or drawing protocol; styled measurement uses the existing `TextApiV2::measure` function
+
+## 0.9.0 - Oct 1, 2026
+
+Added:
+
+- `SurfaceApiV2` and `CAP_SURFACE` for independent expanded pages, compact left/right content, and background/foreground drawing layers
+- `InputApiV2` and `CAP_INPUT` for hit regions, pointer capture, scrolling, keyboard focus, text/IME input, and file-drop events on plugin-owned widgets and surfaces
+- `EventsApiV2` and `CAP_EVENTS` for worker-thread event subscriptions, timers, island-state snapshots, visibility/resize notifications, asynchronous results, and animation scheduling
+- `CommandApiV2` and `CAP_COMMAND` for registering and executing plugin commands, invoking built-in commands, and adding optional tray entries and global hotkeys
+- `MediaSessionApiV2` and `CAP_MEDIA_SESSION` for enumerating native SMTC sessions and plugin media sources, selecting a session, and controlling playback and seeking
+- Rust SDK wrappers for surfaces, input, events, commands, and media sessions, with owned callback resources for subscriptions, timers, and commands
+- Compile-time ABI layout assertions for the new service tables and extension types
+
+Changed:
+
+- Kept ABI v2 and all existing entry-point, descriptor, and service-table layouts; the new capabilities require a host that implements their interfaces
+
 ## 0.8.0 - Sep 27, 2026
 
 Changed:

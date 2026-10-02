@@ -2,6 +2,33 @@
 
 此更新日志列出 `winisland-plugin-api` 各版本的变更。网站将此文件显示为插件 API 更新日志。
 
+## 0.9.1 - 2026 年 10 月 2 日
+
+新增：
+
+- Rust SDK 的 `TextApi::measure_style(text, &TextStyle)`，可按对应的字号、字重、斜体和字体族测量文字
+
+变更：
+
+- `TextApi::measure` 改为调用样式测量方法，保持原有的 400 字重、正体行为
+- ABI v2 入口、描述符、服务表和绘制协议均未改变；样式测量复用现有的 `TextApiV2::measure` 函数
+
+## 0.9.0 - 2026 年 10 月 1 日
+
+新增：
+
+- `SurfaceApiV2` 和 `CAP_SURFACE`，支持独立展开页、紧凑模式左右区域内容，以及背景与前景绘制层
+- `InputApiV2` 和 `CAP_INPUT`，为插件自己的小组件与 surface 提供命中区域、指针捕获、滚动、键盘焦点、文字与输入法输入，以及文件拖放事件
+- `EventsApiV2` 和 `CAP_EVENTS`，提供插件工作线程上的事件订阅、定时器、岛状态快照、可见性与尺寸通知、异步结果和动画调度
+- `CommandApiV2` 和 `CAP_COMMAND`，支持注册与执行插件命令、调用宿主内置命令，以及可选的托盘入口和全局快捷键
+- `MediaSessionApiV2` 和 `CAP_MEDIA_SESSION`，支持枚举原生 SMTC 会话与插件媒体源、选择会话，以及控制播放与跳转进度
+- Surface、Input、Events、Command 和 Media Session 的 Rust SDK 封装，以及拥有所有权的订阅、定时器和命令回调资源
+- 新服务表和扩展类型的编译期 ABI 布局断言
+
+变更：
+
+- 保留 ABI v2 及现有入口、描述符和服务表布局；使用新增能力时，宿主必须实现对应接口
+
 ## 0.8.0 - 2026 年 9 月 27 日
 
 变更：
