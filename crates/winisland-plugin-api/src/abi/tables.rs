@@ -1,6 +1,6 @@
 use crate::types::v2::{
     CommandExecuteFnV2, CommandInfoV2, CommandSpecV2, EventSubscriptionV2, InputRegionV2,
-    IslandStateV2, MediaSessionV2, SurfaceSpecV2, TimerSpecV2,
+    IslandStateV2, LocalDateTimeV2, LunarDateV2, MediaSessionV2, SurfaceSpecV2, TimerSpecV2,
 };
 use std::ffi::c_void;
 
@@ -367,5 +367,28 @@ pub struct MediaSessionApiV2 {
     >,
     pub send: Option<
         unsafe extern "C" fn(*mut c_void, PluginToken, u64, u32, u64, *mut u64) -> PluginStatus,
+    >,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SystemApiV2 {
+    pub prefix: TablePrefix,
+    pub local_datetime: Option<
+        unsafe extern "C" fn(*mut c_void, PluginToken, *mut LocalDateTimeV2) -> PluginStatus,
+    >,
+    pub lunar_date: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            PluginToken,
+            u16,
+            u16,
+            u16,
+            *mut LunarDateV2,
+            *mut u8,
+        ) -> PluginStatus,
+    >,
+    pub current_language: Option<
+        unsafe extern "C" fn(*mut c_void, PluginToken, *mut u8, u32, *mut u32) -> PluginStatus,
     >,
 }

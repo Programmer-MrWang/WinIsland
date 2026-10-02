@@ -11,8 +11,8 @@ use crate::types::v2::settings::{
 use crate::types::v2::widget::WidgetSpecV2;
 use crate::types::v2::{
     ByteSlice, CommandInfoV2, CommandSpecV2, EventSubscriptionV2, ImageId, InputRegionV2,
-    IslandStateV2, MediaSessionV2, PluginEventV2, PluginToken, ResourceId, SurfaceSpecV2,
-    TextMetricsV2, TextStyleV2, TimerSpecV2, Utf8Slice, WidgetId,
+    IslandStateV2, LocalDateTimeV2, LunarDateV2, MediaSessionV2, PluginEventV2, PluginToken,
+    ResourceId, SurfaceSpecV2, TextMetricsV2, TextStyleV2, TimerSpecV2, Utf8Slice, WidgetId,
 };
 
 macro_rules! assert_layout {
@@ -29,6 +29,40 @@ const _: () = {
     assert!(size_of::<PluginStatus>() == 4);
     assert!(align_of::<PluginStatus>() == 4);
 };
+
+assert_layout!(
+    SystemApiV2,
+    40,
+    8,
+    prefix = 0,
+    local_datetime = 16,
+    lunar_date = 24,
+    current_language = 32
+);
+assert_layout!(
+    LocalDateTimeV2,
+    20,
+    4,
+    struct_size = 0,
+    year = 4,
+    month = 6,
+    day = 8,
+    day_of_week = 10,
+    hour = 12,
+    minute = 14,
+    second = 16,
+    millisecond = 18
+);
+assert_layout!(
+    LunarDateV2,
+    8,
+    4,
+    struct_size = 0,
+    month = 4,
+    day = 5,
+    leap = 6,
+    reserved = 7
+);
 
 assert_layout!(PluginToken, 8, 8, 0 = 0);
 assert_layout!(ResourceId, 8, 8, 0 = 0);

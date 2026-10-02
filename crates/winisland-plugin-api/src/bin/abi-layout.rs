@@ -13,7 +13,8 @@ use winisland_plugin_api::types::v2::settings::{
 };
 use winisland_plugin_api::types::v2::widget::WidgetSpecV2;
 use winisland_plugin_api::types::v2::{
-    ByteSlice, ImageId, PluginToken, ResourceId, TextMetricsV2, TextStyleV2, Utf8Slice, WidgetId,
+    ByteSlice, ImageId, LocalDateTimeV2, LunarDateV2, PluginToken, ResourceId, TextMetricsV2,
+    TextStyleV2, Utf8Slice, WidgetId,
 };
 
 macro_rules! show {
@@ -84,6 +85,26 @@ fn main() {
     show!(ImageApiV2, prefix, decode, upload_rgba, album_art, release);
     show!(StoreApiV2, prefix, get, set, delete);
     show!(LogApiV2, prefix, write);
+    show!(
+        SystemApiV2,
+        prefix,
+        local_datetime,
+        lunar_date,
+        current_language
+    );
+    show!(
+        LocalDateTimeV2,
+        struct_size,
+        year,
+        month,
+        day,
+        day_of_week,
+        hour,
+        minute,
+        second,
+        millisecond
+    );
+    show!(LunarDateV2, struct_size, month, day, leap, reserved);
     show!(
         ContextDataV2,
         struct_size,

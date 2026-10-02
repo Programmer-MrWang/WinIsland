@@ -45,6 +45,10 @@ impl Rgba {
     pub const fn argb(self) -> u32 {
         self.0
     }
+
+    pub const fn with_alpha(self, alpha: u8) -> Self {
+        Self((self.0 & 0x00ff_ffff) | ((alpha as u32) << 24))
+    }
 }
 
 #[derive(Clone, Copy)]

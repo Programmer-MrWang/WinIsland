@@ -2,7 +2,9 @@ pub mod context;
 pub mod i18n;
 pub mod lyrics;
 pub mod settings;
+mod system;
 pub mod widget;
+pub use system::*;
 
 use std::ffi::c_void;
 
