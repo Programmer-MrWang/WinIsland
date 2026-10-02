@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -5,7 +6,9 @@ use std::time::{Duration, Instant};
 
 use parking_lot::{Condvar, Mutex};
 use tokio::sync::watch;
-use winisland_platform::{MediaSessionHandle, PlatformError, ThumbnailError, TrackInfo};
+use winisland_platform::{
+    MediaSessionHandle, PlatformError, ThumbnailError, Timeline, TimelineDurationSource, TrackInfo,
+};
 
 use super::{LyricsFetchConfig, LyricsFetchRequest, MediaInfo, spawn_lyrics_fetch};
 
@@ -18,6 +21,8 @@ const FAST_THUMBNAIL_RETRY_DELAY: Duration = Duration::from_millis(300);
 const THUMBNAIL_RETRY_DELAY: Duration = Duration::from_millis(500);
 const SEEK_CONFIRM_TOLERANCE_MS: u64 = 1_500;
 const TIMELINE_DRIFT_THRESHOLD_MS: u64 = 2_000;
+const SEEK_RANGE_STABILITY: Duration = Duration::from_secs(1);
+const MAX_OBSERVED_DURATIONS: usize = 64;
 static NEXT_TRACK_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 type MediaMetadata = TrackInfo;
@@ -134,11 +139,171 @@ pub(super) struct TimelineCache {
     position_ms: u64,
     duration_secs: u64,
     duration_ms: u64,
+    duration_source: TimelineDurationSource,
+    seek_range: Option<SeekRangeObservation>,
+    observed: VecDeque<ObservedDuration>,
+}
+
+#[derive(PartialEq, Eq)]
+struct DurationIdentity {
+    source: String,
+    title: String,
+    artist: String,
+    album: String,
+}
+
+impl DurationIdentity {
+    fn new(source: &str, track: &TrackInfo) -> Self {
+        Self {
+            source: source.to_string(),
+            title: track.title.trim().to_lowercase(),
+            artist: track.artist.trim().to_lowercase(),
+            album: track.album.trim().to_lowercase(),
+        }
+    }
+}
+
+struct ObservedDuration {
+    identity: DurationIdentity,
+    duration_ms: u64,
+}
+
+struct SeekRangeObservation {
+    duration_ms: u64,
+    position_ms: u64,
+    since: Instant,
 }
 
 impl TimelineCache {
     pub(super) fn clear(&mut self) {
-        *self = Self::default();
+        let observed = std::mem::take(&mut self.observed);
+        *self = Self {
+            observed,
+            ..Self::default()
+        };
+    }
+
+    fn recall(&self, identity: &DurationIdentity) -> u64 {
+        if let Some(entry) = self
+            .observed
+            .iter()
+            .rev()
+            .find(|entry| entry.identity == *identity)
+        {
+            return entry.duration_ms;
+        }
+        if identity.title.is_empty() || identity.artist.is_empty() || identity.album.is_empty() {
+            return 0;
+        }
+        let mut matches = self.observed.iter().rev().filter(|entry| {
+            entry.identity.title == identity.title
+                && entry.identity.artist == identity.artist
+                && entry.identity.album == identity.album
+        });
+        let Some(latest) = matches.next() else {
+            return 0;
+        };
+        if matches
+            .any(|entry| entry.duration_ms.abs_diff(latest.duration_ms) > SEEK_CONFIRM_TOLERANCE_MS)
+        {
+            return 0;
+        }
+        latest.duration_ms
+    }
+
+    fn remember(&mut self, identity: DurationIdentity, duration_ms: u64) {
+        if identity.title.is_empty() || identity.artist.is_empty() || duration_ms == 0 {
+            return;
+        }
+        self.observed.retain(|entry| entry.identity != identity);
+        self.observed.push_back(ObservedDuration {
+            identity,
+            duration_ms,
+        });
+        while self.observed.len() > MAX_OBSERVED_DURATIONS {
+            self.observed.pop_front();
+        }
+    }
+
+    fn observe(
+        &mut self,
+        identity: DurationIdentity,
+        timeline: Timeline,
+        now: Instant,
+    ) -> TimelineSnapshot {
+        let position_ms = u64::try_from(timeline.position.as_millis()).unwrap_or(u64::MAX);
+        let reported_duration = u64::try_from(timeline.duration.as_millis()).unwrap_or(u64::MAX);
+        let known_duration = if self.duration_source == TimelineDurationSource::EndTime {
+            self.duration_ms
+        } else {
+            self.recall(&identity)
+        };
+        let known_duration =
+            if position_ms <= known_duration.saturating_add(SEEK_CONFIRM_TOLERANCE_MS) {
+                known_duration
+            } else {
+                0
+            };
+        let (duration_ms, duration_source) = match timeline.duration_source {
+            TimelineDurationSource::EndTime if reported_duration > 0 => {
+                self.seek_range = None;
+                self.remember(identity, reported_duration);
+                (reported_duration, TimelineDurationSource::EndTime)
+            }
+            TimelineDurationSource::SeekRange if known_duration == 0 => {
+                let stable = match &self.seek_range {
+                    Some(previous)
+                        if previous.duration_ms == reported_duration
+                            && position_ms >= previous.position_ms
+                            && position_ms - previous.position_ms
+                                <= u64::try_from(
+                                    now.duration_since(previous.since).as_millis(),
+                                )
+                                .unwrap_or(u64::MAX)
+                                .saturating_mul(4)
+                                .saturating_add(TIMELINE_DRIFT_THRESHOLD_MS) =>
+                    {
+                        now.duration_since(previous.since) >= SEEK_RANGE_STABILITY
+                            && position_ms - previous.position_ms
+                                >= TIMELINE_REFRESH_INTERVAL.as_millis() as u64
+                    }
+                    _ => {
+                        self.seek_range = Some(SeekRangeObservation {
+                            duration_ms: reported_duration,
+                            position_ms,
+                            since: now,
+                        });
+                        false
+                    }
+                };
+                if stable {
+                    (reported_duration, TimelineDurationSource::SeekRange)
+                } else {
+                    (0, TimelineDurationSource::Unknown)
+                }
+            }
+            _ => {
+                self.seek_range = None;
+                (
+                    known_duration,
+                    if known_duration > 0 {
+                        TimelineDurationSource::EndTime
+                    } else {
+                        TimelineDurationSource::Unknown
+                    },
+                )
+            }
+        };
+        self.last_fetch = Some(now);
+        self.position_ms = position_ms;
+        self.duration_secs = duration_ms / 1000;
+        self.duration_ms = duration_ms;
+        self.duration_source = duration_source;
+        TimelineSnapshot {
+            position_ms,
+            duration_secs: self.duration_secs,
+            duration_ms,
+        }
     }
 }
 
@@ -165,7 +330,7 @@ struct QueuedThumbnailRequest {
 
 #[derive(Default)]
 struct PendingMediaRequests {
-    lyrics: Option<(String, String, u64)>,
+    lyrics: Option<(String, String, u64, u64)>,
     thumbnail: Option<QueuedThumbnailRequest>,
 }
 
@@ -203,6 +368,7 @@ pub(super) fn fetch_properties(
     let timeline = read_timeline(
         session,
         &source_app_id,
+        &metadata,
         should_fetch_timeline,
         track_changed,
         timeline_cache,
@@ -228,7 +394,7 @@ pub(super) fn fetch_properties(
             request.is_song_change,
         );
     }
-    if let Some((title, artist, request_id)) = requests.lyrics {
+    if let Some((title, artist, request_id, track_id)) = requests.lyrics {
         spawn_lyrics_fetch(
             info_tx,
             LyricsFetchRequest {
@@ -239,6 +405,7 @@ pub(super) fn fetch_properties(
                 source: lyrics.source.to_string(),
                 local_dir: lyrics.local_dir.map(str::to_string),
                 request_id,
+                track_id,
             },
             lyrics.bridge.cloned(),
         );
@@ -267,7 +434,15 @@ fn update_media_info(
 
     changed |= sync_timeline(info, update, track_changed);
     changed |= update_playback_state(info, update, track_changed);
+    let duration_was_unknown = info.duration_ms == 0;
     changed |= update_duration(info, update.timeline);
+    if duration_was_unknown
+        && info.duration_ms > 0
+        && info.lyrics.is_none()
+        && requests.lyrics.is_none()
+    {
+        queue_lyrics(info, requests);
+    }
     changed
 }
 
@@ -292,8 +467,6 @@ fn start_new_track(
     info.track_id = next_track_id();
     info.duration_secs = update.timeline.duration_secs;
     info.duration_ms = update.timeline.duration_ms;
-    info.lyrics = None;
-    info.lyrics_fetch_id = info.lyrics_fetch_id.wrapping_add(1);
     info.thumbnail = None;
     info.thumbnail_hash = 0;
     info.position_ms = update.timeline.position_ms;
@@ -302,11 +475,7 @@ fn start_new_track(
     info.seek_target_ms = 0;
     info.seek_guard_until = None;
     info.last_thumbnail_fetch = Instant::now();
-    requests.lyrics = Some((
-        info.title.clone(),
-        info.artist.clone(),
-        info.lyrics_fetch_id,
-    ));
+    queue_lyrics(info, requests);
     requests.thumbnail = Some(QueuedThumbnailRequest {
         track_id: info.track_id,
         title: info.title.clone(),
@@ -324,14 +493,7 @@ fn enrich_current_track(
     let mut changed = false;
     if info.artist.is_empty() && !metadata.artist.is_empty() {
         info.artist.clone_from(&metadata.artist);
-        if info.lyrics.is_none() {
-            info.lyrics_fetch_id = info.lyrics_fetch_id.wrapping_add(1);
-            requests.lyrics = Some((
-                info.title.clone(),
-                info.artist.clone(),
-                info.lyrics_fetch_id,
-            ));
-        }
+        queue_lyrics(info, requests);
         changed = true;
     }
     if info.album.is_empty() && !metadata.album.is_empty() {
@@ -425,6 +587,17 @@ fn update_playback_state(
     playback_changed || source_changed
 }
 
+fn queue_lyrics(info: &mut MediaInfo, requests: &mut PendingMediaRequests) {
+    info.lyrics = None;
+    info.lyrics_fetch_id = info.lyrics_fetch_id.wrapping_add(1);
+    requests.lyrics = Some((
+        info.title.clone(),
+        info.artist.clone(),
+        info.lyrics_fetch_id,
+        info.track_id,
+    ));
+}
+
 fn update_duration(info: &mut MediaInfo, timeline: TimelineSnapshot) -> bool {
     if info.duration_secs == timeline.duration_secs && info.duration_ms == timeline.duration_ms {
         return false;
@@ -450,6 +623,7 @@ fn is_new_track(info: &MediaInfo, metadata: &MediaMetadata, source_app_id: &str)
 fn read_timeline(
     session: &Arc<dyn MediaSessionHandle>,
     source_app_id: &str,
+    metadata: &MediaMetadata,
     should_fetch: bool,
     reset_cache: bool,
     cache: &mut TimelineCache,
@@ -475,21 +649,8 @@ fn read_timeline(
         };
     };
 
-    let smtc_pos = u64::try_from(timeline.position.as_millis()).unwrap_or(u64::MAX);
-    let duration_secs = timeline.duration.as_secs();
-    let duration_ms = u64::try_from(timeline.duration.as_millis()).unwrap_or(u64::MAX);
-
-    cache.source_app_id.clear();
-    cache.source_app_id.push_str(source_app_id);
-    cache.last_fetch = Some(Instant::now());
-    cache.position_ms = smtc_pos;
-    cache.duration_secs = duration_secs;
-    cache.duration_ms = duration_ms;
-    TimelineSnapshot {
-        position_ms: smtc_pos,
-        duration_secs,
-        duration_ms,
-    }
+    let identity = DurationIdentity::new(source_app_id, metadata);
+    cache.observe(identity, timeline, Instant::now())
 }
 
 fn fetch_thumbnail(request: ThumbnailFetchRequest, info_tx: &watch::Sender<MediaInfo>) {

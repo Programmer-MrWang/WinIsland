@@ -336,6 +336,15 @@ pub struct TrackInfo {
 pub struct Timeline {
     pub position: Duration,
     pub duration: Duration,
+    pub duration_source: TimelineDurationSource,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TimelineDurationSource {
+    #[default]
+    Unknown,
+    EndTime,
+    SeekRange,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use super::{get_json, query_matches_song, url_encode, winisland_ua};
+use super::{SongQuery, get_json, ranked, url_encode, winisland_ua};
 use crate::lyrics::{LyricLine, parse_lyrics};
 
 pub(super) async fn fetch(
@@ -10,13 +10,36 @@ pub(super) async fn fetch(
     artist: &str,
     duration_secs: u64,
 ) -> Option<Arc<Vec<LyricLine>>> {
-    if let Some(lyrics) = fetch_exact(title, artist, duration_secs).await {
+    let query = SongQuery::new(title, artist, duration_secs);
+    if duration_secs > 0
+        && !artist.trim().is_empty()
+        && let Some(lyrics) = fetch_exact(&query, title, artist, duration_secs).await
+    {
         return Some(lyrics);
     }
-    fetch_search(title, artist).await
+    for term in query.search_terms() {
+        let url = format!("https://lrclib.net/api/search?q={}", url_encode(&term));
+        let Some(json) = get_json(&url, &winisland_ua()).await else {
+            continue;
+        };
+        let Some(items) = json.as_array() else {
+            continue;
+        };
+        for item in ranked(items, |item| candidate_score(&query, item)) {
+            if let Some(lyrics) = parse_candidate(item) {
+                return Some(lyrics);
+            }
+        }
+    }
+    None
 }
 
-async fn fetch_exact(title: &str, artist: &str, duration_secs: u64) -> Option<Arc<Vec<LyricLine>>> {
+async fn fetch_exact(
+    query: &SongQuery,
+    title: &str,
+    artist: &str,
+    duration_secs: u64,
+) -> Option<Arc<Vec<LyricLine>>> {
     let url = format!(
         "https://lrclib.net/api/get?track_name={}&artist_name={}&duration={}",
         url_encode(title),
@@ -24,35 +47,25 @@ async fn fetch_exact(title: &str, artist: &str, duration_secs: u64) -> Option<Ar
         duration_secs
     );
     let json = get_json(&url, &winisland_ua()).await?;
-    let synced = json.get("syncedLyrics")?.as_str()?;
-    let lines = parse_lyrics(synced, "");
-    (!lines.is_empty()).then(|| Arc::new(lines))
+    candidate_score(query, &json)?;
+    parse_candidate(&json)
 }
 
-async fn fetch_search(title: &str, artist: &str) -> Option<Arc<Vec<LyricLine>>> {
-    let query = if artist.is_empty() {
-        title.to_string()
-    } else {
-        format!("{title} {artist}")
-    };
-    let url = format!("https://lrclib.net/api/search?q={}", url_encode(&query));
-    let json = get_json(&url, &winisland_ua()).await?;
+fn candidate_score(query: &SongQuery, item: &Value) -> Option<u16> {
+    let title = item.get("trackName")?.as_str()?;
+    let artists = item.get("artistName").and_then(Value::as_str).into_iter();
+    let duration = item
+        .get("duration")
+        .and_then(Value::as_f64)
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(|value| value.round() as u64);
+    item.get("syncedLyrics")?
+        .as_str()
+        .filter(|value| !value.trim().is_empty())?;
+    query.score(title, artists, duration)
+}
 
-    for item in json.as_array()? {
-        let Some(synced) = item.get("syncedLyrics").and_then(Value::as_str) else {
-            continue;
-        };
-        if item
-            .get("trackName")
-            .and_then(Value::as_str)
-            .is_some_and(|name| !query_matches_song(&query, name))
-        {
-            continue;
-        }
-        let lines = parse_lyrics(synced, "");
-        if !lines.is_empty() {
-            return Some(Arc::new(lines));
-        }
-    }
-    None
+fn parse_candidate(item: &Value) -> Option<Arc<Vec<LyricLine>>> {
+    let lines = parse_lyrics(item.get("syncedLyrics")?.as_str()?, "");
+    (!lines.is_empty()).then(|| Arc::new(lines))
 }

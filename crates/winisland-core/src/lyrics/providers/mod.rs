@@ -1,6 +1,7 @@
 mod amll;
 mod kugou;
 mod lrclib;
+mod matching;
 mod netease;
 mod qq;
 
@@ -10,6 +11,7 @@ use serde_json::Value;
 
 use super::LyricLine;
 use crate::config::{APP_HOMEPAGE, APP_VERSION};
+use matching::{SongQuery, ranked};
 
 pub(super) const MOZILLA_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
@@ -33,7 +35,7 @@ pub(super) async fn fetch(
         "qq" => qq::fetch(title, artist, duration_secs).await,
         "kugou" => kugou::fetch(title, artist, duration_secs).await,
         "lrclib" => lrclib::fetch(title, artist, duration_secs).await,
-        _ => netease::fetch(title, artist).await,
+        _ => netease::fetch(title, artist, duration_secs).await,
     }
 }
 
@@ -86,25 +88,6 @@ async fn get_json_request(request: reqwest::RequestBuilder) -> Option<Value> {
 
 pub(super) fn winisland_ua() -> String {
     format!("WinIsland/{APP_VERSION} ({APP_HOMEPAGE})")
-}
-
-pub(super) fn query_matches_song(query: &str, song_name: &str) -> bool {
-    let query = query.to_lowercase();
-    let song_name = song_name.to_lowercase();
-    if query.contains(&song_name) || song_name.contains(&query) {
-        return true;
-    }
-    let words = query
-        .split(|character: char| !character.is_alphanumeric())
-        .filter(|word| word.len() > 2)
-        .collect::<Vec<_>>();
-    !words.is_empty() && words.iter().any(|word| song_name.contains(word))
-}
-
-pub(super) fn artist_matches(artist: &str, singer: &str) -> bool {
-    let artist = artist.trim().to_lowercase();
-    let singer = singer.trim().to_lowercase();
-    !artist.is_empty() && (artist.contains(&singer) || singer.contains(&artist))
 }
 
 pub(super) fn url_encode(input: &str) -> String {

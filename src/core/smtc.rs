@@ -127,7 +127,7 @@ impl MediaInfo {
         let current_pos = if self.is_playing {
             let duration_ms = self.effective_duration_ms();
             if duration_ms > 0 && current_pos > duration_ms {
-                current_pos % duration_ms
+                duration_ms
             } else {
                 current_pos
             }
@@ -346,6 +346,7 @@ pub(super) struct LyricsFetchRequest {
     pub(super) source: String,
     pub(super) local_dir: Option<String>,
     pub(super) request_id: u64,
+    pub(super) track_id: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -361,6 +362,7 @@ impl LyricsFetchRequest {
         media.title == self.title
             && media.artist == self.artist
             && media.lyrics_fetch_id == self.request_id
+            && media.track_id == self.track_id
     }
 }
 
@@ -371,38 +373,50 @@ pub(super) fn spawn_lyrics_fetch(
 ) {
     let info_tx = info_tx.clone();
     tokio::spawn(async move {
-        let lyrics = if request.mode == LyricsMode::Lrc {
-            let local_dir = request
-                .local_dir
-                .clone()
-                .filter(|dir| !dir.trim().is_empty());
-            match local_dir {
-                Some(dir) => {
-                    let title = request.title.clone();
-                    let artist = request.artist.clone();
-                    tokio::task::spawn_blocking(move || load_local_lyrics(&title, &artist, &dir))
+        let mut media_changes = info_tx.subscribe();
+        if !request.matches(&media_changes.borrow()) {
+            return;
+        }
+        let fetch = async {
+            let lyrics = if request.mode == LyricsMode::Lrc {
+                let local_dir = request
+                    .local_dir
+                    .clone()
+                    .filter(|dir| !dir.trim().is_empty());
+                match local_dir {
+                    Some(dir) => {
+                        let title = request.title.clone();
+                        let artist = request.artist.clone();
+                        tokio::task::spawn_blocking(move || {
+                            load_local_lyrics(&title, &artist, &dir)
+                        })
                         .await
                         .ok()
                         .flatten()
+                    }
+                    None => None,
                 }
-                None => None,
+            } else {
+                fetch_online_lyrics(
+                    &request.title,
+                    &request.artist,
+                    request.duration_secs,
+                    &request.source,
+                )
+                .await
+            };
+            match (lyrics, lyrics_bridge) {
+                (Some(lyrics), Some(bridge)) => {
+                    tokio::task::spawn_blocking(move || bridge.apply(lyrics))
+                        .await
+                        .ok()
+                }
+                (lyrics, _) => lyrics,
             }
-        } else {
-            fetch_online_lyrics(
-                &request.title,
-                &request.artist,
-                request.duration_secs,
-                &request.source,
-            )
-            .await
         };
-        let lyrics = match (lyrics, lyrics_bridge) {
-            (Some(lyrics), Some(bridge)) => {
-                tokio::task::spawn_blocking(move || bridge.apply(lyrics))
-                    .await
-                    .ok()
-            }
-            (lyrics, _) => lyrics,
+        let lyrics = tokio::select! {
+            result = fetch => result,
+            _ = media_changes.wait_for(|media| !request.matches(media)) => return,
         };
         let applied = info_tx.send_if_modified(|current| {
             if !request.matches(current) {

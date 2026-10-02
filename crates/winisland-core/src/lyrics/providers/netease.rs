@@ -1,76 +1,72 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use super::{MOZILLA_UA, get_json, query_matches_song, url_encode};
+use super::{MOZILLA_UA, SongQuery, get_json, ranked, url_encode};
 use crate::lyrics::{LyricLine, LyricTiming, parse_lyrics};
 
-pub(super) async fn fetch(title: &str, artist: &str) -> Option<Arc<Vec<LyricLine>>> {
-    if let Some(lyrics) = fetch_inner(title, artist).await {
-        return Some(lyrics);
+pub(super) async fn fetch(
+    title: &str,
+    artist: &str,
+    duration_secs: u64,
+) -> Option<Arc<Vec<LyricLine>>> {
+    let query = SongQuery::new(title, artist, duration_secs);
+    for term in query.search_terms() {
+        if let Some(lyrics) = fetch_inner(&query, &term).await {
+            return Some(lyrics);
+        }
     }
-    if artist.is_empty() {
-        None
-    } else {
-        fetch_inner(title, "").await
-    }
+    None
 }
 
-async fn fetch_inner(title: &str, artist: &str) -> Option<Arc<Vec<LyricLine>>> {
-    let query = if artist.is_empty() {
-        title.to_string()
-    } else {
-        format!("{title} {artist}")
-    };
+async fn fetch_inner(query: &SongQuery, term: &str) -> Option<Arc<Vec<LyricLine>>> {
     let url = format!(
-        "https://music.163.com/api/search/get/web?s={}&type=1&offset=0&total=true&limit=10",
-        url_encode(&query)
+        "https://music.163.com/api/search/get/web?s={}&type=1&offset=0&total=true&limit=20",
+        url_encode(term)
     );
-
-    let json = get_json(
-        &url,
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    )
-    .await?;
-
+    let json = get_json(&url, MOZILLA_UA).await?;
     let songs = json.get("result")?.get("songs")?.as_array()?;
-    if songs.is_empty() {
-        return None;
-    }
-
-    let artist_lower = artist.to_lowercase();
-    let mut song_id = None;
-
-    if !artist_lower.is_empty() {
-        for song in songs {
-            if let Some(artists) = song.get("artists").and_then(|artists| artists.as_array()) {
-                for candidate in artists {
-                    if let Some(name) = candidate.get("name").and_then(|name| name.as_str())
-                        && name.to_lowercase() == artist_lower
-                    {
-                        song_id = song.get("id").and_then(serde_json::Value::as_i64);
-                        break;
-                    }
-                }
-            }
-            if song_id.is_some() {
-                break;
-            }
-        }
-    }
-
-    if song_id.is_none() {
-        let first = songs.first()?;
-        if let Some(name) = first.get("name").and_then(|name| name.as_str())
-            && !query_matches_song(&query, name)
-        {
+    let candidates = ranked(songs, |song| {
+        let title = song.get("name")?.as_str()?;
+        if !query.accepts_edition(title) {
             return None;
         }
-        song_id = first.get("id")?.as_i64();
+        let artists = song
+            .get("artists")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|artist| artist.get("name")?.as_str());
+        let duration = song
+            .get("duration")
+            .or_else(|| song.get("dt"))
+            .and_then(serde_json::Value::as_u64)
+            .map(|ms| ms / 1000);
+        let artists: Vec<_> = artists.collect();
+        std::iter::once(title)
+            .chain(
+                song.get("alias")
+                    .and_then(serde_json::Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(serde_json::Value::as_str),
+            )
+            .filter_map(|name| query.score(name, artists.iter().copied(), duration))
+            .max()
+    });
+    for song in candidates {
+        if let Some(song_id) = song.get("id").and_then(serde_json::Value::as_i64)
+            && let Some(lyrics) = fetch_song(song_id).await
+        {
+            return Some(lyrics);
+        }
     }
+    None
+}
 
+async fn fetch_song(song_id: i64) -> Option<Arc<Vec<LyricLine>>> {
     let lyric_url = format!(
         "https://music.163.com/api/song/lyric?id={}&lv=1&kv=1&tv=-1&yv=1&ytv=1",
-        song_id?
+        song_id
     );
     let lyric_json = get_json(&lyric_url, MOZILLA_UA).await?;
     let translated_lrc = lyric_json

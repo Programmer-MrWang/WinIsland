@@ -7,18 +7,28 @@ use quick_xml::encoding::Decoder;
 use quick_xml::events::{BytesStart, BytesText, Event};
 use serde_json::Value;
 
-use super::{artist_matches, get_json, query_matches_song, url_encode, winisland_ua};
-use crate::lyrics::{LyricLine, LyricTiming, MatchKey};
+use super::{SongQuery, get_json, ranked, url_encode, winisland_ua};
+use crate::lyrics::{LyricLine, LyricTiming};
 
 const API_BASE: &str = "https://api.amll.dev/v1/lyrics";
 
 pub(super) async fn fetch(title: &str, artist: &str) -> Option<Arc<Vec<LyricLine>>> {
+    let query = SongQuery::new(title, artist, 0);
+    for term in query.title_search_terms() {
+        if let Some(lyrics) = fetch_inner(&query, &term).await {
+            return Some(lyrics);
+        }
+    }
+    None
+}
+
+async fn fetch_inner(query: &SongQuery, title: &str) -> Option<Arc<Vec<LyricLine>>> {
     let search_url = format!(
         "{API_BASE}/search?musicName={}&pageSize=50",
         url_encode(title)
     );
     let Some(search_json) = get_json(&search_url, &winisland_ua()).await else {
-        log::info!("AMLL: search request failed for '{title}' - '{artist}'");
+        log::info!("AMLL: search request failed for '{title}'");
         return None;
     };
     let Some(items) = search_json
@@ -26,22 +36,24 @@ pub(super) async fn fetch(title: &str, artist: &str) -> Option<Arc<Vec<LyricLine
         .and_then(|data| data.get("items"))
         .and_then(Value::as_array)
     else {
-        log::info!("AMLL: search returned an invalid response for '{title}' - '{artist}'");
+        log::info!("AMLL: search returned an invalid response for '{title}'");
         return None;
     };
     log::info!(
-        "AMLL: search returned {} candidate(s) for '{title}' - '{artist}'",
+        "AMLL: search returned {} candidate(s) for '{title}'",
         items.len()
     );
-    let Some(candidate) = select_candidate(items, title, artist) else {
-        log::info!("AMLL: no matching candidate for '{title}' - '{artist}'");
-        return None;
-    };
-    let Some(id) = candidate.get("id").and_then(Value::as_u64) else {
-        log::info!("AMLL: selected candidate has no valid ID");
-        return None;
-    };
+    for candidate in select_candidates(items, query) {
+        if let Some(id) = candidate.get("id").and_then(Value::as_u64)
+            && let Some(lyrics) = fetch_candidate(id).await
+        {
+            return Some(lyrics);
+        }
+    }
+    None
+}
 
+async fn fetch_candidate(id: u64) -> Option<Arc<Vec<LyricLine>>> {
     let lyric_url = format!("{API_BASE}/get?id={id}");
     let Some(lyric_json) = get_json(&lyric_url, &winisland_ua()).await else {
         log::info!("AMLL: lyric request failed for candidate {id}");
@@ -66,42 +78,22 @@ pub(super) async fn fetch(title: &str, artist: &str) -> Option<Arc<Vec<LyricLine
     (!lines.is_empty()).then(|| Arc::new(lines))
 }
 
-fn select_candidate<'a>(items: &'a [Value], title: &str, artist: &str) -> Option<&'a Value> {
-    let title_key = MatchKey::new(title);
-    let mut best = None;
-    for item in items {
-        let Some(names) = item.get("musicNames").and_then(Value::as_array) else {
-            continue;
-        };
-        if !names.iter().any(|name| {
-            name.as_str()
-                .is_some_and(|name| query_matches_song(title, name))
-        }) {
-            continue;
-        }
-        let exact_title = names.iter().any(|name| {
-            name.as_str()
-                .is_some_and(|name| MatchKey::new(name).matches(&title_key))
-        });
-        let artist_match = artist.is_empty()
-            || item
-                .get("artistNames")
-                .and_then(Value::as_array)
-                .is_some_and(|names| {
-                    names.iter().any(|name| {
-                        name.as_str()
-                            .is_some_and(|name| artist_matches(artist, name))
-                    })
-                });
-        if !artist_match {
-            continue;
-        }
-        let score = u8::from(exact_title);
-        if best.is_none_or(|(best_score, _)| score > best_score) {
-            best = Some((score, item));
-        }
-    }
-    best.map(|(_, item)| item)
+fn select_candidates<'a>(items: &'a [Value], query: &SongQuery) -> Vec<&'a Value> {
+    ranked(items, |item| {
+        let names = item.get("musicNames")?.as_array()?;
+        let artists: Vec<_> = item
+            .get("artistNames")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect();
+        names
+            .iter()
+            .filter_map(Value::as_str)
+            .filter_map(|name| query.score(name, artists.iter().copied(), None))
+            .max()
+    })
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

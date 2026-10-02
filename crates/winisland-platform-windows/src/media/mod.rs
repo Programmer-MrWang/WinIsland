@@ -171,20 +171,13 @@ impl MediaSessionHandle for WindowsMediaSession {
 
     fn timeline(&self) -> Option<Timeline> {
         let props = self.0.GetTimelineProperties().ok()?;
-        let position = props
-            .Position()
-            .ok()
-            .map(|value| value.Duration.max(0) / 10_000)
-            .unwrap_or(0);
-        let duration = props
-            .EndTime()
-            .ok()
-            .map(|value| value.Duration.max(0) / 10_000)
-            .unwrap_or(0);
-        Some(Timeline {
-            position: Duration::from_millis(position as u64),
-            duration: Duration::from_millis(duration as u64),
-        })
+        Some(timeline_from_ticks(
+            props.StartTime().map_or(0, |value| value.Duration),
+            props.EndTime().map_or(0, |value| value.Duration),
+            props.MinSeekTime().map_or(0, |value| value.Duration),
+            props.MaxSeekTime().map_or(0, |value| value.Duration),
+            props.Position().map_or(0, |value| value.Duration),
+        ))
     }
 
     fn send(&self, command: MediaCommand) -> Result<bool, PlatformError> {
@@ -204,7 +197,18 @@ impl MediaSessionHandle for WindowsMediaSession {
             MediaCommand::Next => self.0.TrySkipNextAsync(),
             MediaCommand::Previous => self.0.TrySkipPreviousAsync(),
             MediaCommand::Seek(position) => {
-                let ticks = position.as_millis().min(i64::MAX as u128 / 10_000) as i64 * 10_000;
+                let start = self
+                    .0
+                    .GetTimelineProperties()
+                    .ok()
+                    .and_then(|timeline| timeline.StartTime().ok())
+                    .map_or(0, |value| value.Duration.max(0));
+                let ticks = start.saturating_add(
+                    position
+                        .as_millis()
+                        .min((i64::MAX - start) as u128 / 10_000) as i64
+                        * 10_000,
+                );
                 return self
                     .0
                     .TryChangePlaybackPositionAsync(ticks)
@@ -221,6 +225,41 @@ impl MediaSessionHandle for WindowsMediaSession {
         let _guard =
             WinRtGuard::new().map_err(|error| ThumbnailError::Backend(error.to_string()))?;
         thumbnail::load(&self.0, expected_title)
+    }
+}
+
+fn timeline_from_ticks(
+    start: i64,
+    end: i64,
+    min_seek: i64,
+    max_seek: i64,
+    position: i64,
+) -> Timeline {
+    use winisland_platform::TimelineDurationSource;
+
+    const POSITION_TOLERANCE_TICKS: i64 = 15_000_000;
+    const MAX_INFERRED_DURATION_TICKS: i64 = 7 * 24 * 60 * 60 * 10_000_000;
+
+    let start = start.max(0);
+    let position = position.max(start);
+    let (boundary, duration_source) = if end > start
+        && end < i64::MAX - POSITION_TOLERANCE_TICKS
+        && position <= end.saturating_add(POSITION_TOLERANCE_TICKS)
+    {
+        (end, TimelineDurationSource::EndTime)
+    } else if min_seek <= start
+        && max_seek > start
+        && max_seek >= position
+        && max_seek - start <= MAX_INFERRED_DURATION_TICKS
+    {
+        (max_seek, TimelineDurationSource::SeekRange)
+    } else {
+        (start, TimelineDurationSource::Unknown)
+    };
+    Timeline {
+        position: Duration::from_millis(((position - start) / 10_000) as u64),
+        duration: Duration::from_millis(((boundary - start) / 10_000) as u64),
+        duration_source,
     }
 }
 

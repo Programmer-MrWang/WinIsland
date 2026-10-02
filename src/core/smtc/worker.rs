@@ -391,10 +391,11 @@ fn refresh_current_lyrics(
             info.artist.clone(),
             info.duration_secs,
             info.lyrics_fetch_id,
+            info.track_id,
         ));
         true
     });
-    let Some((title, artist, duration_secs, request_id)) = request else {
+    let Some((title, artist, duration_secs, request_id, track_id)) = request else {
         return;
     };
     spawn_lyrics_fetch(
@@ -407,6 +408,7 @@ fn refresh_current_lyrics(
             source: lyrics_source.to_string(),
             local_dir: local_dir.map(str::to_string),
             request_id,
+            track_id,
         },
         lyrics_bridge.cloned(),
     );

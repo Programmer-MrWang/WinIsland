@@ -178,8 +178,9 @@ struct MatchKey {
 
 impl MatchKey {
     fn new(value: &str) -> Self {
-        let normalized = normalize_match_text(value, false);
-        let simplified = normalize_match_text(value, true);
+        let value = simplify_chinese(value);
+        let normalized = normalize_match_text(&value, false);
+        let simplified = normalize_match_text(&value, true);
         Self {
             compact: compact(&normalized),
             simplified_compact: compact(&simplified),
@@ -224,7 +225,7 @@ fn collect_lrc_candidates(
             let filename_score = score_lrc_match(&MatchKey::new(stem), title, artist);
             let metadata_score = read_lrc_text_prefix(&path)
                 .map(|content| score_lrc_metadata(&content, title, artist))
-                .unwrap_or_default();
+                .unwrap_or(Some(0))?;
             let score = filename_score.max(metadata_score);
             (score >= 80).then_some((score, path))
         })
@@ -350,7 +351,7 @@ fn shared_token_signal(left: &str, right: &str) -> (usize, usize) {
     (shared_tokens, shared_chars)
 }
 
-fn score_lrc_metadata(content: &str, title: &MatchKey, artist: &MatchKey) -> u16 {
+fn score_lrc_metadata(content: &str, title: &MatchKey, artist: &MatchKey) -> Option<u16> {
     let mut metadata_title = None;
     let mut metadata_artist = None;
     for line in content.lines().take(80) {
@@ -361,20 +362,29 @@ fn score_lrc_metadata(content: &str, title: &MatchKey, artist: &MatchKey) -> u16
             metadata_artist = Some(MatchKey::new(value));
         }
     }
-    if !metadata_title
+    if metadata_title
         .as_ref()
-        .is_some_and(|metadata| metadata.matches(title))
+        .is_some_and(|metadata| !metadata.matches(title))
+        || (!artist.compact.is_empty()
+            && metadata_artist
+                .as_ref()
+                .is_some_and(|metadata| !metadata.matches(artist)))
     {
-        return 0;
+        return None;
     }
-    if metadata_artist
-        .as_ref()
-        .is_some_and(|metadata| metadata.matches(artist))
-    {
-        140
-    } else {
-        115
+    if metadata_title.is_none() {
+        return Some(0);
     }
+    Some(
+        if metadata_artist
+            .as_ref()
+            .is_some_and(|metadata| metadata.matches(artist))
+        {
+            140
+        } else {
+            115
+        },
+    )
 }
 
 fn lrc_metadata_value<'a>(line: &'a str, tag: &str) -> Option<&'a str> {
