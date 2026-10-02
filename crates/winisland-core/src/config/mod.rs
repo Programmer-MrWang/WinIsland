@@ -144,6 +144,8 @@ pub struct AppConfig {
     pub right_click_drag: bool,
     #[setting(toggle)]
     pub notification_display: bool,
+    #[setting(toggle)]
+    pub device_status_indicators: bool,
     #[educe(Default = true)]
     #[setting(toggle)]
     pub replace_native_volume_flyout: bool,

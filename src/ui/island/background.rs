@@ -38,6 +38,7 @@ pub(super) fn draw_background(params: BackgroundParams<'_, '_>) {
     } = params;
     let bg_color = Rgba::BLACK;
     let fallback_color = Rgba::from_argb(205, 32, 32, 36);
+    let bounds = island_path.bounds();
 
     painter.save();
     painter.clip_path(island_path);
@@ -56,7 +57,7 @@ pub(super) fn draw_background(params: BackgroundParams<'_, '_>) {
         }
         "dynamic" => {
             if let Some(blurred_cover) = get_blurred_cover_background(drawing_context, media) {
-                draw_effect_base(painter, rect);
+                draw_effect_base(painter, bounds);
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
@@ -80,8 +81,9 @@ pub(super) fn draw_background(params: BackgroundParams<'_, '_>) {
                 let cx = rect.left + rect.width() / 2.0;
                 let cy = rect.top + rect.height() / 2.0;
 
-                let diagonal = rect.width().hypot(rect.height());
-                let side_len = diagonal * 1.3f32;
+                let horizontal = (bounds.right - cx).max(cx - bounds.left);
+                let vertical = (bounds.bottom - cy).max(cy - bounds.top);
+                let side_len = 2.6 * horizontal.hypot(vertical);
 
                 painter.save();
                 painter.translate(Vec2::new(cx + dx as f32, cy + dy as f32));
@@ -96,7 +98,7 @@ pub(super) fn draw_background(params: BackgroundParams<'_, '_>) {
                     &ImageOptions::default().with_sampling(Sampling::LinearNone),
                 );
                 painter.restore();
-                painter.fill_rect(rect, Rgba::from_argb(120, 20, 20, 24));
+                painter.fill_rect(bounds, Rgba::from_argb(120, 20, 20, 24));
             } else if host_backdrop {
                 draw_host_glass(painter, island_path);
             } else {

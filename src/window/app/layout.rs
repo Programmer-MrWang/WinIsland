@@ -30,9 +30,18 @@ impl App {
         } else {
             self.config.base_height * compact_scale
         };
+        let multitask_extent = if self.config.device_status_indicators {
+            crate::ui::island::multitask::side_extent(
+                compact_scale,
+                self.config.base_height * compact_scale,
+            )
+        } else {
+            0.0
+        };
         let width = compact_width
             .max(compact_overlay.width)
-            .max(self.config.expanded_width * expanded_scale);
+            .max(self.config.expanded_width * expanded_scale)
+            + 2.0 * multitask_extent;
         let height = compact_lyric_height.max(compact_overlay.height).max(
             (self.config.expanded_height + crate::ui::expanded::pager::PAGER_EXTENT)
                 * expanded_scale,
@@ -287,7 +296,7 @@ impl App {
             (self.geom.os_w as f64 - TOP_OFFSET as f64 - self.springs.w.value as f64).max(0.0)
         } else {
             (self.geom.os_w as f64 - self.springs.w.value as f64) / 2.0
-        };
+        } + self.springs.multitask_x.value as f64;
 
         let edge_size = self.springs.h.value as f64;
         let hidden_visible_height = self.hidden_visible_height();
@@ -322,6 +331,7 @@ impl App {
 
         IslandLayout {
             offset_x,
+            secondary_left: dock_position.is_right(),
             dock_bottom,
             island_y,
             current_island_x,
@@ -401,7 +411,8 @@ impl App {
         is_paused: bool,
         dt: f32,
     ) -> f32 {
-        let target_base_w = if music_active && !self.expanded && !self.is_width_hiding() {
+        let compact = !self.expanded;
+        let target_base_w = if music_active && compact && !self.is_width_hiding() {
             let has_visible_lyrics = self.config.show_lyrics
                 && (!self.lyrics.current_text.is_empty()
                     || (!self.lyrics.old_text.is_empty() && self.lyrics.transition < 1.0));

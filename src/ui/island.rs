@@ -1,6 +1,7 @@
 mod background;
 mod expanded;
 mod mini;
+pub(crate) mod multitask;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -22,6 +23,7 @@ use winisland_core::config::{
     CompactWidgetSlot, LyricTransitionAnimation, PluginWidgetSlot, WidgetSlot,
 };
 use winisland_core::lyrics::LyricHighlight;
+use winisland_core::multitask::TaskFrame;
 use winisland_plugin_host::draw::replay::PreparedFrame;
 use winisland_plugin_host::host::PluginHost;
 use winisland_render::DrawingContext;
@@ -90,7 +92,6 @@ const MIN_BLUR_SIGMA: f32 = 0.1;
 const MINI_FADE_RATE: f32 = 1.5;
 const COLLAPSED_VISUALIZER_HEIGHT_SCALE: f32 = 0.45;
 const BORDER_WIDTH: f32 = 1.0;
-const BORDER_INSET: f32 = BORDER_WIDTH / 2.0;
 const SOLID_STYLE: &str = "default";
 const SOLID_BORDER_ALPHA: u8 = 30;
 const EFFECT_BORDER_ALPHA: u8 = 40;
@@ -112,6 +113,8 @@ pub struct DrawIslandParams<'a> {
     pub compact_overlay: &'a CompactOverlay,
     pub style: StyleParams<'a>,
     pub attention_alpha: f32,
+    pub surface: &'a multitask::IslandSurface,
+    pub secondary_task: Option<TaskFrame<multitask::activities::Activity>>,
 }
 
 pub fn expanded_content_alpha(
@@ -138,7 +141,7 @@ pub fn draw_island(
         layout.current_w,
         layout.current_h,
     );
-    let island_path = Path::continuous_rounded_rect(rect, layout.current_r);
+    let island_path = &params.surface.primary;
     let blur_filter = if layout.sigmas.0 > MIN_BLUR_SIGMA || layout.sigmas.1 > MIN_BLUR_SIGMA {
         Some(BlurSpec {
             sigma: layout.sigmas,
@@ -150,10 +153,16 @@ pub fn draw_island(
     if let Some(host) = params.style.plugin_host {
         host.runtime().extensions.begin_frame();
     }
-    draw_expanded_shadow(painter, &params, &island_path);
-    draw_background_layer(painter, drawing_context, &params, rect, &island_path);
+    draw_expanded_shadow(painter, &params, island_path);
+    draw_background_layer(
+        painter,
+        drawing_context,
+        &params,
+        rect,
+        &params.surface.outline,
+    );
     painter.save();
-    painter.clip_path(&island_path);
+    painter.clip_path(island_path);
 
     if let Some(host) = params.style.plugin_host {
         crate::ui::plugin::draw_layer(
@@ -223,6 +232,12 @@ pub fn draw_island(
     }
     painter.restore();
     draw_island_border(painter, &params);
+    multitask::draw_content(
+        painter,
+        params.surface,
+        params.secondary_task,
+        layout.compact_scale,
+    );
     draw_pager(painter, drawing_context, &params, rect, expanded_alpha);
     if params.attention_alpha > 0.0 {
         let layout = &params.layout;
@@ -518,20 +533,14 @@ fn draw_island_border(painter: Painter<'_>, params: &DrawIslandParams<'_>) {
     } else {
         1.0
     };
-    let border_path = Path::continuous_rounded_rect(
-        Rect::from_xywh(
-            layout.island_x + BORDER_INSET,
-            layout.island_y + BORDER_INSET,
-            (layout.current_w - BORDER_WIDTH).max(0.0),
-            (layout.current_h - BORDER_WIDTH).max(0.0),
-        ),
-        (layout.current_r - BORDER_INSET).max(0.0),
-    );
+    painter.save();
+    painter.clip_path(&params.surface.outline);
     painter.stroke_path(
-        &border_path,
-        BORDER_WIDTH,
+        &params.surface.outline,
+        BORDER_WIDTH * 2.0,
         Rgba::WHITE.with_alpha((alpha as f32 * opacity) as u8),
         winisland_render::StrokeCap::Butt,
         winisland_render::StrokeJoin::Miter,
     );
+    painter.restore();
 }

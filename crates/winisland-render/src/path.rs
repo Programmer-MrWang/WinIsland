@@ -18,6 +18,59 @@ pub struct Path {
 }
 
 impl Path {
+    pub fn rounded_rect(rect: Rect, radius: f32) -> Self {
+        let rect = skia_safe::Rect::from_ltrb(rect.left, rect.top, rect.right, rect.bottom);
+        let rounded = skia_safe::RRect::new_rect_xy(rect, radius, radius);
+        Self::from_skia(SkPath::rrect(rounded, None))
+    }
+
+    pub fn clip_segments(
+        &self,
+        origin: Point,
+    ) -> std::sync::Arc<[winisland_platform::ClipSegment]> {
+        use skia_safe::path::{Iter, Verb};
+        use winisland_platform::ClipSegment;
+
+        let point = |p: skia_safe::Point| [p.x - origin.x, p.y - origin.y];
+        let mut segments = Vec::new();
+        let mut iter = Iter::new(&self.inner, true);
+        while let Some((verb, points)) = iter.next() {
+            match verb {
+                Verb::Move => segments.push(ClipSegment::Move(point(points[0]))),
+                Verb::Line => segments.push(ClipSegment::Line(point(points[1]))),
+                Verb::Quad => {
+                    segments.push(ClipSegment::Quadratic(point(points[1]), point(points[2])))
+                }
+                Verb::Cubic => segments.push(ClipSegment::Cubic(
+                    point(points[1]),
+                    point(points[2]),
+                    point(points[3]),
+                )),
+                Verb::Conic => {
+                    let mut quads = [skia_safe::Point::default(); 17];
+                    if let Some(count) = SkPath::convert_conic_to_quads(
+                        points[0],
+                        points[1],
+                        points[2],
+                        iter.conic_weight().unwrap_or(1.0),
+                        &mut quads,
+                        3,
+                    ) {
+                        for i in 0..count {
+                            segments.push(ClipSegment::Quadratic(
+                                point(quads[2 * i + 1]),
+                                point(quads[2 * i + 2]),
+                            ));
+                        }
+                    }
+                }
+                Verb::Close => segments.push(ClipSegment::Close),
+                Verb::Done => break,
+            }
+        }
+        segments.into()
+    }
+
     pub fn from_svg(svg: &str) -> Option<Self> {
         SkPath::from_svg(svg).map(|inner| Self { inner })
     }
@@ -128,6 +181,11 @@ pub struct PathBuilder {
 }
 
 impl PathBuilder {
+    pub fn add_path(&mut self, path: &Path) -> &mut Self {
+        self.inner.add_path(&path.inner, None);
+        self
+    }
+
     pub fn new() -> Self {
         Self::default()
     }

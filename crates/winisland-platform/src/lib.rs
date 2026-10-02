@@ -4,6 +4,7 @@
 
 mod audio;
 mod caps;
+mod device_activity;
 mod display;
 mod error;
 mod events;
@@ -17,6 +18,7 @@ mod window;
 
 pub use audio::{AudioMeter, AudioProvider, ProcessCapture, VolumeEndpoint};
 pub use caps::Capabilities;
+pub use device_activity::{DeviceActivity, DeviceActivityFeed, DeviceActivityProvider};
 pub use display::{BrightnessFeed, DisplayProvider};
 pub use error::PlatformError;
 pub use events::{AppHandler, PlatformEvent};

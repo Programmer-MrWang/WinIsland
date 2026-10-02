@@ -5,6 +5,7 @@
 mod audio;
 mod backdrop;
 mod com;
+mod device_activity;
 mod display;
 mod input;
 mod media;
@@ -15,6 +16,7 @@ mod shell;
 pub mod window;
 
 pub use audio::WindowsAudio;
+pub use device_activity::WindowsDeviceActivity;
 pub use display::WindowsDisplay;
 pub use input::WindowsInput;
 pub use media::WindowsMedia;

@@ -26,6 +26,7 @@ pub mod config;
 pub mod context;
 pub mod i18n;
 pub mod lyrics;
+pub mod multitask;
 pub mod persistence;
 pub mod physics;
 pub mod plugin_settings;

@@ -218,6 +218,7 @@ impl App {
         self.update_expand_collapse_click(&window, is_hovering_visible);
 
         let is_paused = music_active && !media_is_playing;
+        self.update_multitask(&window, now);
         self.update_lyrics(&window, music_active, is_paused, dt);
         self.update_spring_targets(&window, music_active, is_paused, dt);
         self.update_compact_widget_refresh(&window, now);
@@ -964,6 +965,12 @@ impl App {
         self.springs
             .r
             .settle(target_r, SETTLE_PIXELS, SETTLE_PIXEL_VELOCITY);
+        self.springs.multitask_x.update_dt(0.0, 0.075, 0.78, dt);
+        self.springs.multitask_x.settle(
+            0.0,
+            0.02 * self.config.compact_scale,
+            0.005 * self.config.compact_scale,
+        );
         self.springs.view.update_dt(target_view, 0.12, 0.68, dt);
         let page_width = self.springs.w.value.max(1.0);
         self.springs.view.settle(
@@ -1005,6 +1012,8 @@ impl App {
     fn schedule_next_frame(&mut self, window: &WindowRef, now: Instant, pacing: FramePacing) {
         let should_periodic_redraw = self.periodic_effect_redraw_due();
         let transition_active = self.springs.any_animating()
+            || self.multitask.is_animating()
+            || self.device_indicators.is_animating()
             || self
                 .attention_pulse_started
                 .is_some_and(|started| now.duration_since(started) < Duration::from_millis(1600))

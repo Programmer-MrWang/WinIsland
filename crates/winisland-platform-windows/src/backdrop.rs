@@ -1,6 +1,9 @@
 use std::cell::{OnceCell, RefCell};
 use std::sync::Arc;
 
+mod geometry;
+use geometry::PathVisual;
+
 use windows::{
     System::DispatcherQueueController,
     UI::Composition::Desktop::DesktopWindowTarget,
@@ -22,7 +25,7 @@ use windows::{
     core::Interface,
 };
 use windows_numerics::{Vector2, Vector3};
-use winisland_platform::{BackdropShape, HostBackdropParams};
+use winisland_platform::{BackdropShape, ClipSegment, HostBackdropParams};
 use winit::{
     raw_window_handle::{HasWindowHandle, RawWindowHandle},
     window::Window,
@@ -50,6 +53,7 @@ pub(crate) struct HostBackdrop {
     target: DesktopWindowTarget,
     _root: ContainerVisual,
     primary: ClippedVisual,
+    path: PathVisual,
     extras: [ClippedVisual; 2],
     last_geometry: RefCell<Option<BackdropGeometry>>,
 }
@@ -64,13 +68,14 @@ struct ShapeGeometry {
     opacity: f32,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 struct BackdropGeometry {
     screen_x: i32,
     screen_y: i32,
     window_width: i32,
     window_height: i32,
     primary: Option<ShapeGeometry>,
+    outline: Option<Arc<[ClipSegment]>>,
     extras: [Option<ShapeGeometry>; 2],
 }
 
@@ -164,6 +169,8 @@ impl HostBackdrop {
             .CreateHostBackdropBrush()
             .map_err(|error| format!("CreateHostBackdropBrush failed: {error}"))?;
         let primary = ClippedVisual::new(&compositor, &brush, &root)?;
+        let path = PathVisual::new(&compositor, &brush, &root)
+            .map_err(|error| format!("Host backdrop path setup failed: {error}"))?;
         let extras = [
             ClippedVisual::new(&compositor, &brush, &root)?,
             ClippedVisual::new(&compositor, &brush, &root)?,
@@ -178,6 +185,7 @@ impl HostBackdrop {
             target,
             _root: root,
             primary,
+            path,
             extras,
             last_geometry: RefCell::new(None),
         })
@@ -235,13 +243,33 @@ impl HostBackdrop {
             screen_y: screen_y as i32,
             window_width: (right - screen_x).ceil().max(1.0) as i32,
             window_height: (bottom - screen_y).ceil().max(1.0) as i32,
-            primary: primary.map(place),
+            primary: primary.map(|shape| {
+                if params.outline.is_some() {
+                    ShapeGeometry {
+                        x: shape.screen_x - screen_x,
+                        y: shape.screen_y - screen_y,
+                        width: shape.width,
+                        height: shape.height,
+                        radius: 0.0,
+                        opacity: shape.opacity,
+                    }
+                } else {
+                    place(shape)
+                }
+            }),
+            outline: params.outline,
             extras: extras.map(|shape| shape.map(place)),
         };
         if self.last_geometry.borrow().as_ref() == Some(&geometry) {
             return Ok(());
         }
-        self.primary.apply(geometry.primary)?;
+        if let Some(outline) = &geometry.outline {
+            self.primary.apply(None)?;
+            self.path.apply(geometry.primary, outline)?;
+        } else {
+            self.path.hide()?;
+            self.primary.apply(geometry.primary)?;
+        }
         for (visual, shape) in self.extras.iter().zip(geometry.extras) {
             visual.apply(shape)?;
         }
@@ -267,6 +295,7 @@ impl HostBackdrop {
             return;
         }
         let _ = self.primary.visual.SetIsVisible(false);
+        let _ = self.path.hide();
         for extra in &self.extras {
             let _ = extra.visual.SetIsVisible(false);
         }

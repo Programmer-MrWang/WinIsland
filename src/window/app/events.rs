@@ -355,6 +355,35 @@ impl App {
                         } else {
                             [None, None]
                         };
+                        let secondary_task = self.multitask.frame();
+                        let surface = crate::ui::island::multitask::surface(
+                            winisland_render::Rect::from_xywh(
+                                island_layout.current_island_x as f32,
+                                island_layout.current_island_y as f32,
+                                self.springs.w.value,
+                                self.springs.h.value,
+                            ),
+                            self.springs.r.value,
+                            self.config.compact_scale,
+                            compact_target_h,
+                            island_layout.secondary_left,
+                            secondary_task,
+                        );
+                        let surface_bounds = surface.outline.bounds();
+                        let outline = secondary_task
+                            .filter(|_| {
+                                self.host_backdrop
+                                    && matches!(
+                                        self.config.island_style.as_str(),
+                                        "glass" | "dynamic"
+                                    )
+                            })
+                            .map(|_| {
+                                surface.outline.clip_segments(winisland_render::Point::new(
+                                    surface_bounds.left,
+                                    surface_bounds.top,
+                                ))
+                            });
                         let host_backdrop = super::system::update_host_backdrop(
                             &mut self.host_backdrop,
                             win.id(),
@@ -363,13 +392,12 @@ impl App {
                                     self.config.island_style.as_str(),
                                     "glass" | "dynamic"
                                 ),
-                                screen_x: self.geom.win_x as f32
-                                    + island_layout.current_island_x as f32,
-                                screen_y: self.geom.win_y as f32
-                                    + island_layout.current_island_y as f32,
-                                width: self.springs.w.value,
-                                height: self.springs.h.value,
+                                screen_x: self.geom.win_x as f32 + surface_bounds.left,
+                                screen_y: self.geom.win_y as f32 + surface_bounds.top,
+                                width: surface_bounds.width(),
+                                height: surface_bounds.height(),
                                 radius: self.springs.r.value,
+                                outline,
                                 extras: pager_backdrop,
                             },
                         );
@@ -465,6 +493,8 @@ impl App {
                                         mini_content,
                                         compact_overlay: &self.compact_overlay,
                                         attention_alpha,
+                                        surface: &surface,
+                                        secondary_task,
                                     },
                                 )
                             });
@@ -558,6 +588,7 @@ impl AppHandler for App {
     }
 
     fn on_exit(&mut self) {
+        self.device_feed = None;
         let _ = crate::platform::shell().set_plugin_commands(&[]);
         if let Some(host) = &self.plugin_host {
             host.runtime().extensions.clear_presentations();

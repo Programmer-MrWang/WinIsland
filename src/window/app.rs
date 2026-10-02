@@ -15,9 +15,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use winisland_core::config::{AppConfig, LyricTransitionAnimation, LyricTransitionMode};
 use winisland_core::context::ContextManager;
 use winisland_core::lyrics::LyricHighlight;
+use winisland_core::multitask::Multitask;
 use winisland_core::physics::Spring;
 use winisland_core::widgets::WidgetManager;
-use winisland_platform::WindowPoint;
+use winisland_platform::{DeviceActivityFeed, WindowPoint};
 use winisland_plugin_host::draw::replay::PreparedFrame;
 use winisland_plugin_host::host::PluginHost;
 use winisland_plugin_package::manifest::PluginManifest;
@@ -28,6 +29,7 @@ mod events;
 mod frame;
 mod input;
 mod layout;
+mod multitask;
 mod pages;
 mod plugin_media;
 mod plugins;
@@ -74,6 +76,10 @@ pub struct App {
     compact_overlay: CompactOverlay,
     config: AppConfig,
     expanded: bool,
+    multitask: Multitask<crate::ui::island::multitask::activities::Activity>,
+    device_indicators: crate::ui::island::multitask::activities::DeviceIndicators,
+    device_feed: Option<Box<dyn DeviceActivityFeed>>,
+    device_monitor_retry: Cooldown,
     expanded_press_started_inside: bool,
     expanded_header_press: Option<(i32, i32)>,
     components_hidden: bool,
@@ -195,6 +201,10 @@ impl Default for App {
             tray_installed: false,
             config: config.clone(),
             expanded: false,
+            multitask: Multitask::new(),
+            device_indicators: Default::default(),
+            device_feed: None,
+            device_monitor_retry: Cooldown::ready(),
             expanded_press_started_inside: false,
             expanded_header_press: None,
             components_hidden: false,
@@ -477,6 +487,7 @@ struct IslandSprings {
     w: Spring,
     h: Spring,
     r: Spring,
+    multitask_x: Spring,
     view: Spring,
     hide: Spring,
     expanded_target: bool,
@@ -491,6 +502,7 @@ impl IslandSprings {
             w: Spring::new(config.base_width * config.compact_scale),
             h: Spring::new(config.base_height * config.compact_scale),
             r: Spring::new((config.base_height * config.compact_scale) / 2.0),
+            multitask_x: Spring::new(0.0),
             view: Spring::new(0.0),
             hide: Spring::new(0.0),
             expanded_target: false,
@@ -525,6 +537,8 @@ impl IslandSprings {
         self.w.velocity.abs() > 0.001
             || self.h.velocity.abs() > 0.001
             || self.r.velocity.abs() > 0.001
+            || self.multitask_x.value.abs() > 0.001
+            || self.multitask_x.velocity.abs() > 0.001
             || self.view.velocity.abs() > 0.001
             || self.hide.velocity.abs() > 0.001
     }
@@ -532,6 +546,7 @@ impl IslandSprings {
 
 struct IslandLayout {
     offset_x: f64,
+    secondary_left: bool,
     dock_bottom: bool,
     island_y: f64,
     current_island_x: f64,

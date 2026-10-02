@@ -64,6 +64,7 @@ impl SettingsApp {
             caps.brightness_control,
         );
         page.setting(&self.config, AppConfigField::ClipboardLinkPrompt, true);
+        page.setting(&self.config, AppConfigField::DeviceStatusIndicators, true);
         if !caps.autostart || !caps.toast_events || !caps.input_hooks || !caps.brightness_control {
             page.row_label(tr("platform_unavailable"));
         }

@@ -157,7 +157,7 @@ pub enum HitRegion {
     WholeWindow(bool),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct HostBackdropParams {
     pub enabled: bool,
     pub screen_x: f32,
@@ -165,7 +165,17 @@ pub struct HostBackdropParams {
     pub width: f32,
     pub height: f32,
     pub radius: f32,
+    pub outline: Option<std::sync::Arc<[ClipSegment]>>,
     pub extras: [Option<BackdropShape>; 2],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ClipSegment {
+    Move([f32; 2]),
+    Line([f32; 2]),
+    Quadratic([f32; 2], [f32; 2]),
+    Cubic([f32; 2], [f32; 2], [f32; 2]),
+    Close,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
