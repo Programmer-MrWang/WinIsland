@@ -4,8 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number to release (e.g., 1.0.0 or v1.0.0)'
+        description: 'Version number (e.g., 1.0.0 or 1.0.0.1 for a package-only build)'
         required: true
+        type: string
+      package_only:
+        description: 'Build a signed installer artifact without publishing a release'
+        required: false
+        default: false
+        type: boolean
+      application_commit:
+        description: 'Optional full application commit SHA for package-only builds; packaging uses the workflow commit'
+        required: false
         type: string
 
 permissions:
@@ -18,14 +27,56 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Validate build inputs
+      id: build-inputs
+      shell: pwsh
+      env:
+        REQUESTED_VERSION: ${{ inputs.version }}
+        PACKAGE_ONLY: ${{ inputs.package_only }}
+        APPLICATION_COMMIT: ${{ inputs.application_commit }}
+      run: |
+        $version = $env:REQUESTED_VERSION.TrimStart('v', 'V')
+        $pattern = if ($env:PACKAGE_ONLY -eq 'true') { '^\d+\.\d+\.\d+(\.\d+)?$' } else { '^\d+\.\d+\.\d+$' }
+        if ($version -notmatch $pattern) {
+          throw 'Use three numeric version components, or four for a package-only build.'
+        }
+        if (@($version.Split('.') | Where-Object { [decimal]$_ -gt 65535 }).Count -ne 0) {
+          throw 'Each Windows package version component must be at most 65535.'
+        }
+        if ($version.Split('.').Count -eq 3) { $version += '.0' }
+        if ($env:APPLICATION_COMMIT) {
+          if ($env:PACKAGE_ONLY -ne 'true' -or $env:APPLICATION_COMMIT -notmatch '^[0-9a-fA-F]{40}$') {
+            throw 'An application commit must be a full SHA and requires package_only.'
+          }
+        }
+        "package_version=$version" >> $env:GITHUB_OUTPUT
+
+    - name: Select application source
+      if: inputs.package_only && inputs.application_commit != ''
+      shell: pwsh
+      env:
+        APPLICATION_COMMIT: ${{ inputs.application_commit }}
+        PACKAGING_COMMIT: ${{ github.sha }}
+      run: |
+        git fetch --no-tags --depth=1 origin $env:APPLICATION_COMMIT
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to fetch application source.' }
+        git checkout --detach $env:APPLICATION_COMMIT
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to select application source.' }
+        git restore --source $env:PACKAGING_COMMIT --worktree -- packaging
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to restore packaging source.' }
+
     - name: Set up Python
+      if: ${{ !inputs.package_only }}
       uses: actions/setup-python@v5
       with:
         python-version: '3.x'
 
     - name: Extract Release Notes
+      if: ${{ !inputs.package_only }}
+      env:
+        RELEASE_VERSION: ${{ inputs.version }}
       run: |
-        python .github/scripts/extract_changelog.py "${{ inputs.version }}"
+        python .github/scripts/extract_changelog.py "$env:RELEASE_VERSION"
 
     - name: Set up Rust
       uses: dtolnay/rust-toolchain@stable
@@ -38,7 +89,7 @@ jobs:
         choco install ninja innosetup -y
 
     - name: Build Release
-      run: cargo build --release --verbose
+      run: cargo build --release --locked --verbose
       env:
         WINISLAND_PACKAGE_CHANNEL: stable
 
@@ -58,22 +109,54 @@ jobs:
       shell: pwsh
       env:
         WINISLAND_MSIX_CERT_PASSWORD: ${{ secrets.WINISLAND_MSIX_CERT_PASSWORD }}
+        PACKAGE_VERSION: ${{ steps.build-inputs.outputs.package_version }}
       run: |
         if ([string]::IsNullOrWhiteSpace($env:WINISLAND_MSIX_CERT_PASSWORD)) {
           throw 'WINISLAND_MSIX_CERT_PASSWORD is not configured.'
         }
-        $version = '${{ inputs.version }}'.TrimStart('v', 'V')
         .\packaging\installer\Build-Installer.ps1 `
           -Channel stable `
-          -Version "$version.0" `
+          -Version $env:PACKAGE_VERSION `
           -CertificatePath $env:WINISLAND_MSIX_CERT_PATH `
           -CertificatePassword $env:WINISLAND_MSIX_CERT_PASSWORD `
           -OutputDirectory .\target\installer\stable
 
-    - name: Determine Tag Name
-      shell: bash
+    - name: Record installer provenance
+      if: inputs.package_only
+      shell: pwsh
+      env:
+        PACKAGE_VERSION: ${{ steps.build-inputs.outputs.package_version }}
+        PACKAGING_COMMIT: ${{ github.sha }}
       run: |
-        VERSION="${{ inputs.version }}"
+        $installer = '.\target\installer\stable\installer\WinIsland-Setup.exe'
+        $signature = Get-AuthenticodeSignature $installer
+        if ($null -eq $signature.SignerCertificate) { throw 'Installer is not signed.' }
+        @{
+          package_version = $env:PACKAGE_VERSION
+          channel = 'stable'
+          application_commit = (git rev-parse HEAD)
+          packaging_commit = $env:PACKAGING_COMMIT
+          sha256 = (Get-FileHash $installer -Algorithm SHA256).Hash
+          signer_thumbprint = $signature.SignerCertificate.Thumbprint
+        } | ConvertTo-Json | Set-Content '.\target\installer\stable\installer\provenance.json'
+
+    - name: Upload signed installer
+      if: inputs.package_only
+      uses: actions/upload-artifact@v4
+      with:
+        name: WinIsland-stable-${{ steps.build-inputs.outputs.package_version }}
+        if-no-files-found: error
+        path: |
+          target/installer/stable/installer/WinIsland-Setup.exe
+          target/installer/stable/installer/provenance.json
+
+    - name: Determine Tag Name
+      if: ${{ !inputs.package_only }}
+      shell: bash
+      env:
+        RELEASE_VERSION: ${{ inputs.version }}
+      run: |
+        VERSION="$RELEASE_VERSION"
         if [[ "$VERSION" =~ ^[vV] ]]; then
           echo "TAG_NAME=$VERSION" >> $GITHUB_ENV
         else
@@ -81,6 +164,7 @@ jobs:
         fi
 
     - name: Create GitHub Release
+      if: ${{ !inputs.package_only }}
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ env.TAG_NAME }}
@@ -95,6 +179,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Refresh website download
+      if: ${{ !inputs.package_only }}
       shell: bash
       run: gh workflow run rust.yml --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" -f docs_only=true
       env:
