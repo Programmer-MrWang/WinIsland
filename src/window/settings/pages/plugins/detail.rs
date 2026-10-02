@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use winisland_render::{Painter, Point, Radius, Rect, Rgba, Vec2};
 
 use crate::plugin::inventory::InstalledPlugin;
@@ -32,10 +34,10 @@ enum DetailPlugin {
 }
 
 impl DetailPlugin {
-    fn name(&self) -> &str {
+    fn name(&self) -> Cow<'_, str> {
         match self {
-            Self::Installed(plugin) => &plugin.name,
-            Self::Marketplace(plugin) => &plugin.name,
+            Self::Installed(plugin) => plugin.display_name(),
+            Self::Marketplace(plugin) => Cow::Borrowed(&plugin.name),
         }
     }
 
@@ -53,10 +55,10 @@ impl DetailPlugin {
         }
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> Cow<'_, str> {
         match self {
-            Self::Installed(plugin) => &plugin.description,
-            Self::Marketplace(plugin) => &plugin.description,
+            Self::Installed(plugin) => plugin.display_description(),
+            Self::Marketplace(plugin) => Cow::Borrowed(&plugin.description),
         }
     }
 
@@ -131,8 +133,9 @@ impl SettingsApp {
                     });
                     return true;
                 }
-                if uninstall_rect(panel_x, safe_github_url(&installed.github_link))
-                    .contains(content_point)
+                if !installed.builtin
+                    && uninstall_rect(panel_x, safe_github_url(&installed.github_link))
+                        .contains(content_point)
                 {
                     if self
                         .pending_plugin_uninstall_id
@@ -202,8 +205,9 @@ impl SettingsApp {
         let action_hovered = match &plugin {
             DetailPlugin::Installed(installed) => {
                 toggle_rect(panel_x).contains(point)
-                    || uninstall_rect(panel_x, safe_github_url(&installed.github_link))
-                        .contains(point)
+                    || (!installed.builtin
+                        && uninstall_rect(panel_x, safe_github_url(&installed.github_link))
+                            .contains(point))
             }
             DetailPlugin::Marketplace(marketplace) => {
                 let action = self.marketplace_action(marketplace);
@@ -285,7 +289,7 @@ impl SettingsApp {
         };
         let name = ellipsize_text(
             fm,
-            plugin.name(),
+            &plugin.name(),
             17.0,
             winisland_render::FontStyle::bold(),
             name_width.max(30.0),
@@ -315,14 +319,24 @@ impl SettingsApp {
                     panel_x + DETAIL_W - DETAIL_PADDING - 36.0,
                     y + 2.0,
                 );
-                draw_uninstall_button(
-                    painter,
-                    panel_x,
-                    safe_github_url(&installed.github_link),
-                    self.pending_plugin_uninstall_id
-                        .as_ref()
-                        .is_some_and(|id| id == &installed.id),
-                );
+                if installed.builtin {
+                    SettingsPainter::new(painter).text(
+                        &tr("plugin_builtin"),
+                        (panel_x + DETAIL_PADDING, DETAIL_ACTION_Y + 18.0),
+                        11.0,
+                        true,
+                        theme.text_sec,
+                    );
+                } else {
+                    draw_uninstall_button(
+                        painter,
+                        panel_x,
+                        safe_github_url(&installed.github_link),
+                        self.pending_plugin_uninstall_id
+                            .as_ref()
+                            .is_some_and(|id| id == &installed.id),
+                    );
+                }
             }
             DetailPlugin::Marketplace(marketplace) => {
                 let action = self.marketplace_action(marketplace);
@@ -379,7 +393,7 @@ impl SettingsApp {
         }
         let description = markdown::render(markdown::MarkdownRenderParams {
             painter,
-            markdown: plugin.description(),
+            markdown: &plugin.description(),
             origin: (panel_x + DETAIL_PADDING, content_y),
             width: DETAIL_W - DETAIL_PADDING * 2.0,
             visible_range: (
@@ -535,7 +549,7 @@ fn plugin_readme_y(plugin: &DetailPlugin) -> f32 {
             DetailPlugin::Marketplace(plugin) if plugin.revoked_reason.is_some() => 54.0,
             _ => 0.0,
         }
-        + markdown::markdown_height(plugin.description(), DETAIL_W - DETAIL_PADDING * 2.0)
+        + markdown::markdown_height(&plugin.description(), DETAIL_W - DETAIL_PADDING * 2.0)
         + 14.0
 }
 

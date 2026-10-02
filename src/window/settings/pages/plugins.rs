@@ -160,8 +160,17 @@ impl SettingsApp {
                     painter,
                     theme,
                     card,
-                    &plugin.name,
-                    &format!("{} · v{}", plugin.author, plugin.version),
+                    &plugin.display_name(),
+                    &format!(
+                        "{} · v{}{}",
+                        plugin.author,
+                        plugin.version,
+                        if plugin.builtin {
+                            format!(" · {}", tr("plugin_builtin"))
+                        } else {
+                            String::new()
+                        }
+                    ),
                     142.0,
                 );
                 draw_toggle(
@@ -433,7 +442,7 @@ impl SettingsApp {
             .iter()
             .find(|installed| installed.id.eq_ignore_ascii_case(&plugin.id))
         {
-            Some(installed) if plugin.has_update_for(&installed.version) => {
+            Some(installed) if !installed.builtin && plugin.has_update_for(&installed.version) => {
                 MarketplaceAction::Update
             }
             Some(_) => MarketplaceAction::Installed,
@@ -780,7 +789,7 @@ pub(super) fn draw_plugin_icon(
         drawing_context,
         painter,
         &plugin.id,
-        &plugin.name,
+        &plugin.display_name(),
         plugin.icon.as_deref(),
         rect,
     );
