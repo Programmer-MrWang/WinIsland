@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -18,8 +19,29 @@ pub struct InstalledPlugin {
     pub description: String,
     pub github_link: String,
     pub enabled: bool,
+    pub builtin: bool,
     pub icon: Option<Vec<u8>>,
     pub readme: Option<String>,
+}
+
+impl InstalledPlugin {
+    pub fn display_name(&self) -> Cow<'_, str> {
+        if self.builtin
+            && let Some(plugin) = super::builtin_plugin(&self.id)
+        {
+            return Cow::Owned(winisland_core::i18n::tr(plugin.name_key));
+        }
+        Cow::Borrowed(&self.name)
+    }
+
+    pub fn display_description(&self) -> Cow<'_, str> {
+        if self.builtin
+            && let Some(plugin) = super::builtin_plugin(&self.id)
+        {
+            return Cow::Owned(winisland_core::i18n::tr(plugin.description_key));
+        }
+        Cow::Borrowed(&self.description)
+    }
 }
 
 pub struct PluginManager {
@@ -56,6 +78,9 @@ impl PluginManager {
 
     pub fn uninstall_plugin(&self, id: &str) -> Result<(), String> {
         validate_id(id)?;
+        if super::is_builtin(id) {
+            return Err(winisland_core::i18n::tr("plugin_builtin_uninstall"));
+        }
         let targets = uninstall_targets(&self.plugin_dir, id);
         if targets.is_empty() {
             return Err(format!("Plugin '{id}' is not installed"));
@@ -110,10 +135,28 @@ impl Default for PluginManager {
 
 fn scan(directory: &Path) -> Vec<InstalledPlugin> {
     let disabled = disabled_plugin_ids(directory);
+    let mut plugins: Vec<_> = super::builtin_plugins()
+        .into_iter()
+        .map(|plugin| {
+            let metadata =
+                winisland_plugin_host::loader::PluginMetadata::from(&plugin.descriptor.metadata);
+            InstalledPlugin {
+                enabled: !disabled.contains(&metadata.id),
+                builtin: true,
+                id: metadata.id,
+                name: winisland_core::i18n::tr(plugin.name_key),
+                author: metadata.author,
+                version: metadata.version,
+                description: winisland_core::i18n::tr(plugin.description_key),
+                github_link: String::new(),
+                icon: None,
+                readme: None,
+            }
+        })
+        .collect();
     let Ok(entries) = std::fs::read_dir(directory) else {
-        return Vec::new();
+        return plugins;
     };
-    let mut plugins = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
         if path
@@ -161,6 +204,7 @@ fn packaged(directory: &Path, disabled: &HashSet<String>) -> Option<InstalledPlu
     .and_then(|path| read_bounded_file(&path, MAX_PLUGIN_README_BYTES).ok())
     .and_then(|bytes| String::from_utf8(bytes).ok());
     Some(InstalledPlugin {
+        builtin: false,
         enabled: !disabled.contains(&manifest.id),
         id: manifest.id,
         name: manifest.name,
@@ -177,6 +221,7 @@ fn manual(path: &Path, disabled: &HashSet<String>) -> Option<InstalledPlugin> {
     let library = PluginLibrary::open(path).ok()?;
     let metadata = library.metadata();
     Some(InstalledPlugin {
+        builtin: false,
         id: metadata.id.clone(),
         name: metadata.name.clone(),
         author: metadata.author.clone(),

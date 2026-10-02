@@ -1,13 +1,18 @@
 mod locale;
 
 use std::cell::RefCell;
+use std::ffi::c_void;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
+use winisland_plugin_api::sdk::{
+    CallbackResource, DrawListBuilder, Error, Event, Host, Size, Surface, TextStyle,
+};
+use winisland_plugin_api::*;
+use winisland_render::{Point, Rect, Rgba, Vec2};
+
 use self::locale::{Holiday, Region, days_in_month, weekday};
-use crate::ui::widget::expanded::{draw_widget_text_centered, widget_grid_layout};
-use winisland_render::text::FontManager;
-use winisland_render::{Painter, Point, Rect, Rgba, StrokeCap, Vec2};
 
 const ACCENT: Rgba = Rgba::from_rgb(255, 69, 58);
 const PANEL_RATIO: f32 = 0.36;
@@ -23,6 +28,370 @@ const DAY_LABELS: [&str; 31] = [
     "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17",
     "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
 ];
+
+pub const ID: &str = "winisland-calendar";
+pub const PAGE_KEY: &str = "calendar";
+
+pub fn descriptor() -> PluginDescriptorV2 {
+    PluginDescriptorV2 {
+        struct_size: std::mem::size_of::<PluginDescriptorV2>() as u32,
+        abi_version: ABI_VERSION_2,
+        capabilities: CAP_SURFACE | CAP_INPUT | CAP_EVENTS | CAP_TEXT,
+        metadata: PluginMetadataC::new(
+            ID,
+            "Calendar",
+            winisland_core::config::APP_VERSION,
+            "WinIsland",
+            "Calendar with month navigation and regional holidays.",
+        ),
+        create: Some(create),
+        shutdown: Some(shutdown),
+        destroy: Some(destroy),
+        on_tick: Some(tick),
+    }
+}
+
+struct Calendar {
+    target: Option<Arc<CalendarTarget>>,
+    callbacks: Vec<CallbackResource>,
+}
+
+struct CalendarTarget {
+    host: Host,
+    page: Surface,
+}
+
+impl Calendar {
+    fn new(host: Host) -> Result<Self, Error> {
+        let page = host.surfaces()?.create(SurfaceSpecV2 {
+            kind: SURFACE_PAGE,
+            flags: SURFACE_ENABLED,
+            order: i32::MIN,
+            width: 360.0,
+            height: 200.0,
+            key: str_to_fixed(PAGE_KEY),
+            title: str_to_fixed("Calendar"),
+            ..Default::default()
+        })?;
+        let target = Arc::new(CalendarTarget { host, page });
+        reset_to_today();
+        target.refresh()?;
+        let events = target.host.events()?;
+        let input_target = target.clone();
+        let input = events.subscribe(
+            EVENT_INPUT | EVENT_RESIZE | EVENT_VISIBILITY,
+            target.page.id(),
+            move |event| {
+                if event.kind == EVENT_VISIBILITY && event.code == 0 {
+                    reset_to_today();
+                } else if event.kind == EVENT_INPUT {
+                    handle_input(&event);
+                }
+                if let Err(error) = input_target.refresh() {
+                    input_target
+                        .host
+                        .log()
+                        .write(3, &format!("Calendar update failed: {error}"));
+                }
+            },
+        )?;
+        let timer_target = target.clone();
+        let timer = events.timer(
+            TimerSpecV2 {
+                target: target.page.id(),
+                flags: TIMER_VISIBLE_ONLY,
+                delay_ms: 1000,
+                interval_ms: 1000,
+                ..Default::default()
+            },
+            move |_| {
+                if let Err(error) = timer_target.refresh() {
+                    timer_target
+                        .host
+                        .log()
+                        .write(3, &format!("Calendar refresh failed: {error}"));
+                }
+            },
+        )?;
+        Ok(Self {
+            target: Some(target),
+            callbacks: vec![input, timer],
+        })
+    }
+}
+
+impl CalendarTarget {
+    fn refresh(&self) -> Result<(), Error> {
+        let (width, height) = self.page.logical_size();
+        if width <= 0.0 || height <= 0.0 {
+            return Ok(());
+        }
+        let layout = layout(0.0, 0.0, width, height, 1.0);
+        let regions: Vec<_> = std::iter::once((CalendarAction::Today, layout.title))
+            .chain(
+                layout
+                    .buttons
+                    .into_iter()
+                    .rev()
+                    .map(|(action, rect)| (action, rect.inset(-BUTTON_SLOP))),
+            )
+            .filter(|(_, rect)| rect.width() > 0.0 && rect.height() > 0.0)
+            .map(|(action, rect)| InputRegionV2 {
+                id: action.index() as u64 + 1,
+                x: rect.left,
+                y: rect.top,
+                width: rect.width(),
+                height: rect.height(),
+                flags: INPUT_POINTER | INPUT_KEYBOARD | INPUT_CAPTURE_ON_PRESS,
+                ..Default::default()
+            })
+            .collect();
+        self.host.input()?.set_regions(self.page.id(), &regions)?;
+        let mut painter = CalendarPainter {
+            host: &self.host,
+            list: DrawListBuilder::new(Size::new(width, height)),
+            clips: 0,
+            error: None,
+        };
+        draw_calendar_page(&mut painter, 0.0, 0.0, width, height, 255, 1.0, Rgba::WHITE);
+        if let Some(error) = painter.error {
+            return Err(error);
+        }
+        self.page.submit(painter.list.finish())?;
+        self.host
+            .events()?
+            .set_animation(self.page.id(), is_animating())
+    }
+}
+
+fn handle_input(event: &Event) {
+    let action = [
+        CalendarAction::PreviousYear,
+        CalendarAction::PreviousMonth,
+        CalendarAction::NextMonth,
+        CalendarAction::NextYear,
+        CalendarAction::Today,
+    ]
+    .get(event.sequence.saturating_sub(1) as usize)
+    .copied();
+    match event.detail {
+        INPUT_MOVE | INPUT_ENTER => {
+            set_hover(action);
+        }
+        INPUT_LEAVE | INPUT_CANCEL | INPUT_BLUR => {
+            set_hover(None);
+        }
+        INPUT_DOWN if event.code == 1 => {
+            if let Some(action) = action {
+                apply_action(action);
+            }
+        }
+        INPUT_KEY_DOWN => {
+            let action = match event.code {
+                KEY_LEFT => Some(CalendarAction::PreviousMonth),
+                KEY_RIGHT => Some(CalendarAction::NextMonth),
+                KEY_UP => Some(CalendarAction::PreviousYear),
+                KEY_DOWN => Some(CalendarAction::NextYear),
+                KEY_ENTER => action,
+                _ => None,
+            };
+            if let Some(action) = action {
+                apply_action(action);
+            }
+        }
+        _ => {}
+    }
+}
+
+unsafe extern "C" fn create(
+    info: *const PluginCreateInfoV2,
+    out: *mut PluginHandleV2,
+) -> PluginStatus {
+    if info.is_null() || out.is_null() {
+        return PluginStatus::InvalidArgument;
+    }
+    // SAFETY: The host supplies a live create descriptor and writable handle output.
+    let info = unsafe { &*info };
+    // SAFETY: The host keeps its instance table allocated through shutdown and destruction.
+    let result =
+        unsafe { Host::from_raw(info.host_api, info.plugin_token) }.and_then(Calendar::new);
+    match result {
+        Ok(calendar) => {
+            // SAFETY: The checked output receives an owned instance until destroy is called.
+            unsafe {
+                *out = Box::into_raw(Box::new(calendar)).cast();
+            }
+            PluginStatus::Ok
+        }
+        Err(error) => {
+            log::error!("Cannot create built-in calendar: {error}");
+            PluginStatus::Internal
+        }
+    }
+}
+
+unsafe extern "C" fn shutdown(handle: *mut c_void) -> PluginStatus {
+    if handle.is_null() {
+        return PluginStatus::InvalidArgument;
+    }
+    // SAFETY: The host has joined its worker and owns this live calendar instance.
+    let calendar = unsafe { &mut *handle.cast::<Calendar>() };
+    calendar.callbacks.clear();
+    calendar.target.take();
+    PluginStatus::Ok
+}
+
+unsafe extern "C" fn destroy(handle: *mut c_void) {
+    if !handle.is_null() {
+        // SAFETY: Successful shutdown stopped callbacks; the host destroys the instance once.
+        drop(unsafe { Box::from_raw(handle.cast::<Calendar>()) });
+    }
+}
+
+unsafe extern "C" fn tick(handle: *mut c_void, _: WidgetId, _: f64) -> PluginStatus {
+    // SAFETY: The host worker holds the live instance until it is joined before shutdown.
+    let calendar = unsafe { &*handle.cast::<Calendar>() };
+    match calendar
+        .target
+        .as_ref()
+        .ok_or(Error::StaleHandle)
+        .and_then(|target| target.refresh())
+    {
+        Ok(()) => PluginStatus::Ok,
+        Err(error) => {
+            log::error!("Built-in calendar tick failed: {error}");
+            PluginStatus::Internal
+        }
+    }
+}
+
+struct CalendarPainter<'a> {
+    host: &'a Host,
+    list: DrawListBuilder,
+    clips: usize,
+    error: Option<Error>,
+}
+
+fn draw_rect(rect: Rect) -> winisland_plugin_api::sdk::Rect {
+    winisland_plugin_api::sdk::Rect::new(rect.left, rect.top, rect.width(), rect.height())
+}
+
+fn draw_color(color: Rgba) -> winisland_plugin_api::sdk::Rgba {
+    winisland_plugin_api::sdk::Rgba::from_argb(color.to_argb())
+}
+
+impl CalendarPainter<'_> {
+    fn measure(&mut self, text: &str, size: f32, bold: bool) -> TextMetricsV2 {
+        let style = if bold {
+            TextStyle::default_at(size).bold()
+        } else {
+            TextStyle::default_at(size)
+        };
+        match self
+            .host
+            .text()
+            .and_then(|api| api.measure_style(text, &style))
+        {
+            Ok(metrics) => metrics,
+            Err(error) => {
+                self.error = Some(error);
+                TextMetricsV2::default()
+            }
+        }
+    }
+
+    fn text(&mut self, text: &str, bounds: Rect, size: f32, bold: bool, color: Rgba) {
+        if bounds.width() <= 0.0 || bounds.height() <= 0.0 {
+            return;
+        }
+        let style = if bold {
+            TextStyle::default_at(size).bold()
+        } else {
+            TextStyle::default_at(size)
+        };
+        let metrics = self.measure(text, size, bold);
+        let rect = winisland_plugin_api::sdk::Rect::new(
+            bounds.left,
+            bounds.top + (bounds.height() - metrics.height) / 2.0,
+            bounds.width(),
+            metrics.height.max(size),
+        );
+        self.list.text(text, rect, &style, draw_color(color));
+    }
+
+    fn fill_rect(&mut self, rect: Rect, color: Rgba) {
+        self.list.fill_rect(draw_rect(rect), draw_color(color));
+    }
+
+    fn fill_circle(&mut self, center: Point, radius: f32, color: Rgba) {
+        self.list
+            .fill_circle(center.x, center.y, radius, draw_color(color));
+    }
+
+    fn stroke_line(&mut self, from: Point, to: Point, width: f32, color: Rgba) {
+        let dx = to.x - from.x;
+        let dy = to.y - from.y;
+        let length = dx.hypot(dy);
+        let radius = width / 2.0;
+        if length <= f32::EPSILON {
+            self.fill_circle(from, radius, color);
+            return;
+        }
+        self.list.transform([
+            dx / length,
+            dy / length,
+            -dy / length,
+            dx / length,
+            from.x,
+            from.y,
+        ]);
+        self.list.fill_round_rect(
+            winisland_plugin_api::sdk::Rect::new(-radius, -radius, length + width, width),
+            radius,
+            draw_color(color),
+        );
+        self.list.pop_transform();
+    }
+
+    fn save(&self) -> usize {
+        self.clips
+    }
+
+    fn clip_rect(&mut self, rect: Rect) {
+        self.list.clip_rect(draw_rect(rect));
+        self.clips += 1;
+    }
+
+    fn restore_to(&mut self, count: usize) {
+        while self.clips > count {
+            self.list.pop_clip();
+            self.clips -= 1;
+        }
+    }
+}
+
+fn draw_widget_text_centered(
+    painter: &mut CalendarPainter<'_>,
+    text: &str,
+    bounds: Rect,
+    size: f32,
+    bold: bool,
+    color: Rgba,
+) {
+    let width = painter.measure(text, size, bold).width;
+    painter.text(
+        text,
+        Rect::from_xywh(
+            bounds.left + (bounds.width() - width) / 2.0,
+            bounds.top,
+            width + 1.0,
+            bounds.height(),
+        ),
+        size,
+        bold,
+        color,
+    );
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CalendarAction {
@@ -272,8 +641,9 @@ fn holidays_for(region: Region, year: u16, month: u16) -> Rc<Vec<Holiday>> {
 }
 
 fn layout(ox: f32, oy: f32, w: f32, h: f32, scale: f32) -> CalendarLayout {
-    let grid_layout = widget_grid_layout(ox, oy, w, h, scale);
-    let (inner_x, inner_y, _, _) = grid_layout.slot_rect(0);
+    let radius = (48.0 * scale).min(w / 2.0).min(h / 2.0).max(0.0);
+    let inset = (radius * (1.0 - std::f32::consts::FRAC_1_SQRT_2) + 8.0 * scale).max(24.0 * scale);
+    let (inner_x, inner_y) = (ox + inset, oy + inset);
     let inset_x = inner_x - ox;
     let inset_y = inner_y - oy;
     let inner = Rect::from_xywh(
@@ -327,31 +697,8 @@ fn layout(ox: f32, oy: f32, w: f32, h: f32, scale: f32) -> CalendarLayout {
     }
 }
 
-pub fn hit_test(
-    ox: f32,
-    oy: f32,
-    w: f32,
-    h: f32,
-    scale: f32,
-    point: Point,
-) -> Option<CalendarAction> {
-    let layout = layout(ox, oy, w, h, scale);
-    let slop = -BUTTON_SLOP * scale;
-    layout
-        .buttons
-        .iter()
-        .find(|(_, rect)| rect.inset(slop).contains(point))
-        .map(|(action, _)| *action)
-        .or_else(|| {
-            layout
-                .title
-                .contains(point)
-                .then_some(CalendarAction::Today)
-        })
-}
-
 fn draw_text_left(
-    painter: Painter<'_>,
+    painter: &mut CalendarPainter<'_>,
     text: &str,
     x: f32,
     bounds: Rect,
@@ -359,22 +706,26 @@ fn draw_text_left(
     bold: bool,
     color: Rgba,
 ) -> f32 {
-    let glyph_bounds = FontManager::global().measure_str(text, size, bold);
-    let baseline_y =
-        bounds.top + (bounds.height() - glyph_bounds.height()) / 2.0 - glyph_bounds.top;
-    FontManager::global().draw_str(
-        painter,
+    let width = painter.measure(text, size, bold).width;
+    painter.text(
         text,
-        Point::new(x - glyph_bounds.left, baseline_y),
+        Rect::from_xywh(x, bounds.top, width + 1.0, bounds.height()),
         size,
         bold,
         color,
     );
-    glyph_bounds.width()
+    width
 }
 
-fn fitted_size(text: &str, size: f32, bold: bool, max_width: f32, min_size: f32) -> f32 {
-    let width = FontManager::global().measure_str(text, size, bold).width();
+fn fitted_size(
+    painter: &mut CalendarPainter<'_>,
+    text: &str,
+    size: f32,
+    bold: bool,
+    max_width: f32,
+    min_size: f32,
+) -> f32 {
+    let width = painter.measure(text, size, bold).width;
     if width <= max_width || width <= f32::EPSILON {
         size
     } else {
@@ -382,16 +733,15 @@ fn fitted_size(text: &str, size: f32, bold: bool, max_width: f32, min_size: f32)
     }
 }
 
-fn truncated(text: &str, size: f32, max_width: f32) -> String {
-    let fonts = FontManager::global();
-    if fonts.measure_str(text, size, false).width() <= max_width {
+fn truncated(painter: &mut CalendarPainter<'_>, text: &str, size: f32, max_width: f32) -> String {
+    if painter.measure(text, size, false).width <= max_width {
         return text.to_string();
     }
     let mut chars: Vec<char> = text.chars().collect();
     while !chars.is_empty() {
         chars.pop();
         let candidate: String = chars.iter().collect::<String>() + "…";
-        if fonts.measure_str(&candidate, size, false).width() <= max_width {
+        if painter.measure(&candidate, size, false).width <= max_width {
             return candidate;
         }
     }
@@ -399,7 +749,7 @@ fn truncated(text: &str, size: f32, max_width: f32) -> String {
 }
 
 fn draw_chevrons(
-    painter: Painter<'_>,
+    painter: &mut CalendarPainter<'_>,
     rect: Rect,
     count: usize,
     left: bool,
@@ -419,7 +769,6 @@ fn draw_chevrons(
                 Point::new(tip_x, rect.center_y()),
                 1.5 * scale,
                 color,
-                StrokeCap::Round,
             );
         }
     }
@@ -455,7 +804,7 @@ struct DayStyle {
 }
 
 fn draw_days(
-    painter: Painter<'_>,
+    painter: &mut CalendarPainter<'_>,
     area: Rect,
     year: u16,
     month: u16,
@@ -533,8 +882,8 @@ fn draw_days(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn draw_calendar_page(
-    painter: Painter<'_>,
+fn draw_calendar_page(
+    painter: &mut CalendarPainter<'_>,
     ox: f32,
     oy: f32,
     w: f32,
@@ -583,6 +932,7 @@ pub fn draw_calendar_page(
         let panel_w = layout.panel_w;
         let min_size = 7.0 * scale;
         let weekday_size = fitted_size(
+            painter,
             &text.weekday,
             (inner.height() * 0.09).clamp(9.0 * scale, 12.0 * scale),
             true,
@@ -593,6 +943,7 @@ pub fn draw_calendar_page(
             .min(panel_w * 0.55)
             .max(24.0 * scale);
         let caption_size = fitted_size(
+            painter,
             &text.today_caption,
             (inner.height() * 0.085).clamp(9.0 * scale, 12.0 * scale),
             false,
@@ -664,6 +1015,7 @@ pub fn draw_calendar_page(
             );
             let name_x = inner.left + date_w + 5.0 * scale;
             let name = truncated(
+                painter,
                 text.holidays[index].name,
                 line_size,
                 (inner.left + panel_w - name_x).max(0.0),
@@ -700,6 +1052,7 @@ pub fn draw_calendar_page(
             let (shift, opacity) = slide(motion.transition, title_travel, false);
             let old_current = from_year == today.year && from_month == today.month;
             let old_size = fitted_size(
+                painter,
                 &old_title,
                 layout.title.height() * 0.62,
                 true,
@@ -718,6 +1071,7 @@ pub fn draw_calendar_page(
         }
         let (shift, opacity) = slide(motion.transition, title_travel, true);
         let title_size = fitted_size(
+            painter,
             &text.title,
             layout.title.height() * 0.62,
             true,

@@ -97,6 +97,11 @@ impl App {
             self.is_light_theme = is_light;
             self.update_v2_host_state("", "", false);
             if let Some(host) = &self.plugin_host {
+                for plugin in crate::plugin::builtin_plugins() {
+                    if let Err(error) = host.register_builtin(plugin.descriptor) {
+                        log::warn!("Built-in plugin load failed: {error}");
+                    }
+                }
                 for error in host.load_all() {
                     log::warn!("Plugin load failed: {error}");
                 }

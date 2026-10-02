@@ -1,1 +1,26 @@
+pub mod calendar;
 pub mod inventory;
+
+pub(crate) struct BuiltinPlugin {
+    pub descriptor: winisland_plugin_api::PluginDescriptorV2,
+    pub name_key: &'static str,
+    pub description_key: &'static str,
+}
+
+pub(crate) fn builtin_plugins() -> [BuiltinPlugin; 1] {
+    [BuiltinPlugin {
+        descriptor: calendar::descriptor(),
+        name_key: "page_calendar",
+        description_key: "plugin_calendar_description",
+    }]
+}
+
+pub(crate) fn is_builtin(id: &str) -> bool {
+    builtin_plugin(id).is_some()
+}
+
+pub(crate) fn builtin_plugin(id: &str) -> Option<BuiltinPlugin> {
+    builtin_plugins().into_iter().find(|plugin| {
+        winisland_plugin_host::loader::PluginMetadata::from(&plugin.descriptor.metadata).id == id
+    })
+}

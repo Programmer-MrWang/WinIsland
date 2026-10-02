@@ -23,31 +23,20 @@ pub const PAGER_EXTENT: f32 = GAP + CLOSE_SIZE + SHADOW_SIGMA * 3.0;
 pub enum ExpandedPage {
     Music,
     Widgets,
-    Calendar,
     Timer,
     Plugin(u64),
 }
 
-impl From<ExpandedPageKind> for ExpandedPage {
-    fn from(kind: ExpandedPageKind) -> Self {
-        match kind {
-            ExpandedPageKind::Music => Self::Music,
-            ExpandedPageKind::Widgets => Self::Widgets,
-            ExpandedPageKind::Calendar => Self::Calendar,
-            ExpandedPageKind::Timer => Self::Timer,
-        }
-    }
-}
-
 pub struct PageAvailability {
     pub music: bool,
+    pub calendar: Option<u64>,
 }
 
 impl ExpandedPage {
     pub fn is_available(self, availability: &PageAvailability) -> bool {
         match self {
             Self::Music => availability.music,
-            Self::Widgets | Self::Calendar | Self::Timer | Self::Plugin(_) => true,
+            Self::Widgets | Self::Timer | Self::Plugin(_) => true,
         }
     }
 }
@@ -58,7 +47,12 @@ pub fn available_pages(
 ) -> Vec<ExpandedPage> {
     order
         .iter()
-        .map(|kind| ExpandedPage::from(*kind))
+        .filter_map(|kind| match kind {
+            ExpandedPageKind::Music => Some(ExpandedPage::Music),
+            ExpandedPageKind::Widgets => Some(ExpandedPage::Widgets),
+            ExpandedPageKind::Calendar => availability.calendar.map(ExpandedPage::Plugin),
+            ExpandedPageKind::Timer => Some(ExpandedPage::Timer),
+        })
         .filter(|page| page.is_available(availability))
         .collect()
 }

@@ -60,7 +60,22 @@ impl App {
                 self.install_marketplace_plugin(*plugin);
             }
             Some(crate::window::settings::PluginSettingsRequest::SetEnabled { id, enabled }) => {
-                let result = self.plugin_mgr.set_plugin_enabled(&id, enabled);
+                let builtin = crate::plugin::is_builtin(&id);
+                let result = if builtin {
+                    self.plugin_host
+                        .as_ref()
+                        .ok_or_else(|| "Plugin host is unavailable".to_string())
+                        .and_then(|host| {
+                            host.set_builtin_enabled(&id, enabled)
+                                .map_err(|error| error.to_string())
+                        })
+                } else {
+                    self.plugin_mgr.set_plugin_enabled(&id, enabled)
+                };
+                if builtin && result.is_ok() {
+                    self.refresh_v2_widgets();
+                    self.update_plugin_services();
+                }
                 let plugin_inventory = result
                     .is_ok()
                     .then(|| self.plugin_mgr.installed_plugins_async());
@@ -71,8 +86,12 @@ impl App {
                                 settings.set_plugin_inventory_scan(scan);
                             }
                             settings.set_plugin_status(
-                                winisland_core::i18n::tr("plugin_state_restart"),
-                                true,
+                                winisland_core::i18n::tr(if builtin {
+                                    "plugin_state_updated"
+                                } else {
+                                    "plugin_state_restart"
+                                }),
+                                !builtin,
                             );
                         }
                         Err(error) => settings.set_plugin_status(
@@ -83,6 +102,15 @@ impl App {
                 }
             }
             Some(crate::window::settings::PluginSettingsRequest::Uninstall { id }) => {
+                if crate::plugin::is_builtin(&id) {
+                    if let Some(settings) = self.settings.as_mut() {
+                        settings.set_plugin_status(
+                            winisland_core::i18n::tr("plugin_builtin_uninstall"),
+                            false,
+                        );
+                    }
+                    return;
+                }
                 if let Some(host) = &self.plugin_host
                     && let Err(error) = host.unload_if_loaded(&id)
                 {

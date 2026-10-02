@@ -1027,10 +1027,7 @@ impl App {
             || self.lyrics.transition < 1.0
             || self.is_dragging
             || self.seek.active
-            || self.is_right_dragging
-            || (self.expanded
-                && self.page_visible(ExpandedPage::Calendar)
-                && crate::ui::expanded::calendar_view::is_animating());
+            || self.is_right_dragging;
         let resource_usage_active = self.resource_usage_animating();
         let compact_components_visible = self.expanded || !self.components_hidden;
         let playback_active = !self.is_hidden()

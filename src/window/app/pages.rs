@@ -13,10 +13,17 @@ const DIAL_PIXEL_STEP: f32 = 20.0;
 
 impl App {
     pub(super) fn expanded_pages(&self) -> Vec<ExpandedPage> {
+        let calendar = self.plugin_host.as_ref().and_then(|host| {
+            host.surface_id(
+                crate::plugin::calendar::ID,
+                crate::plugin::calendar::PAGE_KEY,
+            )
+        });
         let mut pages = available_pages(
             &self.config.expanded_page_order,
             &PageAvailability {
                 music: self.music_page_available,
+                calendar,
             },
         );
         if let Some(host) = &self.plugin_host {
@@ -24,6 +31,7 @@ impl App {
                 host.surfaces()
                     .into_iter()
                     .filter(|(_, spec)| spec.kind == winisland_plugin_api::SURFACE_PAGE)
+                    .filter(|(id, _)| Some(*id) != calendar)
                     .map(|(id, _)| ExpandedPage::Plugin(id)),
             );
         }
@@ -62,7 +70,6 @@ impl App {
     }
 
     pub(super) fn reset_page(&mut self) {
-        crate::ui::expanded::calendar_view::reset_to_today();
         self.current_page = self
             .expanded_pages()
             .first()
@@ -220,20 +227,6 @@ impl App {
             spring.update_dt(target, 0.22, 0.62, dt);
             spring.settle(target, 0.002, 0.001);
         }
-        let calendar_hover =
-            (interaction_allowed && self.expanded && self.page_focused(ExpandedPage::Calendar))
-                .then(|| {
-                    crate::ui::expanded::calendar_view::hit_test(
-                        layout.offset_x as f32 + self.page_translation(ExpandedPage::Calendar),
-                        layout.island_y as f32,
-                        self.springs.w.value,
-                        self.springs.h.value,
-                        self.config.expanded_scale,
-                        Point::new(rel_x as f32, rel_y as f32),
-                    )
-                })
-                .flatten();
-        let calendar_changed = crate::ui::expanded::calendar_view::set_hover(calendar_hover);
         let timer_hover =
             (interaction_allowed && self.expanded && self.page_focused(ExpandedPage::Timer))
                 .then(|| {
@@ -248,10 +241,7 @@ impl App {
                 })
                 .flatten();
         let timer_changed = crate::ui::expanded::timer_view::set_hover(timer_hover);
-        if (self.close_hover.value, self.bar_hover.value) != before
-            || calendar_changed
-            || timer_changed
-        {
+        if (self.close_hover.value, self.bar_hover.value) != before || timer_changed {
             window.request_redraw();
         }
     }

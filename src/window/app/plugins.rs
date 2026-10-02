@@ -147,9 +147,18 @@ impl App {
             page: match self.current_page {
                 ExpandedPage::Music => 1,
                 ExpandedPage::Widgets => 2,
-                ExpandedPage::Calendar => 3,
                 ExpandedPage::Timer => 4,
-                ExpandedPage::Plugin(id) => id,
+                ExpandedPage::Plugin(id) => {
+                    if host.surface_id(
+                        crate::plugin::calendar::ID,
+                        crate::plugin::calendar::PAGE_KEY,
+                    ) == Some(id)
+                    {
+                        3
+                    } else {
+                        id
+                    }
+                }
             },
             width: self.springs.w.value,
             height: self.springs.h.value,
