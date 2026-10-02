@@ -24,36 +24,32 @@ function Quote-Argument([string]$Value) {
     '"{0}"' -f $Value
 }
 
-if (-not (Test-IsElevated)) {
-    $arguments = @(
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        (Quote-Argument $PSCommandPath),
-        '-PackagePath',
-        (Quote-Argument $PackagePath),
-        '-CertificatePath',
-        (Quote-Argument $CertificatePath),
-        '-ExternalLocation',
-        (Quote-Argument $ExternalLocation),
-        '-PackageName',
-        (Quote-Argument $PackageName)
-    ) -join ' '
-    $process = Start-Process powershell.exe -ArgumentList $arguments -Verb RunAs -Wait -PassThru
-    if ($process.ExitCode -ne 0) {
-        throw "Elevated identity installation failed with exit code $($process.ExitCode)."
+$certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($CertificatePath)
+try {
+    $trustedCertificatePath = "Cert:\LocalMachine\TrustedPeople\$($certificate.Thumbprint)"
+} finally {
+    $certificate.Dispose()
+}
+
+if (-not (Test-Path -LiteralPath $trustedCertificatePath)) {
+    if (Test-IsElevated) {
+        Import-Certificate -FilePath $CertificatePath -CertStoreLocation 'Cert:\LocalMachine\TrustedPeople' | Out-Null
+    } else {
+        $arguments = '-addstore TrustedPeople ' + (Quote-Argument $CertificatePath)
+        $process = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\certutil.exe') -ArgumentList $arguments -Verb RunAs -WindowStyle Hidden -Wait -PassThru
+        if ($process.ExitCode -ne 0) {
+            throw "Publisher certificate installation failed with exit code $($process.ExitCode)."
+        }
     }
-    return
+    if (-not (Test-Path -LiteralPath $trustedCertificatePath)) {
+        throw 'The publisher certificate was not installed.'
+    }
 }
 
-Import-Certificate -FilePath $CertificatePath -CertStoreLocation 'Cert:\LocalMachine\TrustedPeople' | Out-Null
+Add-AppxPackage -Path $PackagePath -ExternalLocation $ExternalLocation -ForceUpdateFromAnyVersion -ForceTargetApplicationShutdown
 
-$previous = Get-AppxPackage -Name $PackageName -ErrorAction SilentlyContinue
-if ($null -ne $previous) {
-    $previous | Remove-AppxPackage
+$installed = Get-AppxPackage -Name $PackageName -ErrorAction Stop
+if ($null -eq $installed -or [int]$installed.Status -ne 0) {
+    throw "Windows app identity registration could not be verified: $PackageName"
 }
-
-Add-AppxPackage -Path $PackagePath -ExternalLocation $ExternalLocation
+Write-Output "Registered Windows app identity: $($installed.PackageFullName)"
