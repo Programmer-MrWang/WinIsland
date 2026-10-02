@@ -113,6 +113,18 @@ impl App {
         self.update_right_drag(&window, px, py);
 
         let (music_active, media_is_playing) = self.poll_media_info(&window);
+        if self.compact_overlay.update_timer_finished() {
+            window.request_redraw();
+        }
+        let timer = crate::ui::expanded::timer_view::compact_content();
+        let context_changed = self.ctx_mgr.set_smtc_state(music_active, media_is_playing);
+        let timer_changed = self.ctx_mgr.set_timer(timer);
+        if timer.is_some() && self.compact_overlay.is_timer_finished_visible() {
+            self.compact_overlay.clear_timer_finished();
+        }
+        if context_changed || timer_changed {
+            window.request_redraw();
+        }
 
         if self.fullscreen_check.due(now) {
             self.update_fullscreen_suppression(&window, now);
@@ -434,22 +446,21 @@ impl App {
         let Some(minutes) = crate::ui::expanded::timer_view::poll_finished() else {
             return;
         };
-        let duration = winisland_core::i18n::tr_args("timer_minutes", &[&minutes.to_string()]);
-        Self::show_toast(
-            &winisland_core::i18n::tr("timer_done"),
-            &winisland_core::i18n::tr_args("timer_done_toast", &[&duration]),
-        );
         log::info!("Timer finished ({minutes} min)");
+        self.compact_overlay.show_timer_finished();
+        self.expanded = false;
+        self.reset_page();
         if !self.visible || self.fullscreen_hide_active() {
+            let duration = winisland_core::i18n::tr_args("timer_minutes", &[&minutes.to_string()]);
+            Self::show_toast(
+                &winisland_core::i18n::tr("timer_done"),
+                &winisland_core::i18n::tr_args("timer_done_toast", &[&duration]),
+            );
             return;
         }
         if self.is_hidden() {
             self.reveal_island();
         }
-        if !self.expanded {
-            self.expand();
-        }
-        self.current_page = ExpandedPage::Timer;
         self.idle_timer = Instant::now();
         window.request_redraw();
     }
@@ -647,6 +658,7 @@ impl App {
             && !self.expanded
             && !self.is_dragging
             && !compact_overlay_visible
+            && (self.components_hidden || !self.ctx_mgr.timer_active())
             && (self.components_hidden || !music_active || is_paused_idle);
         if !self.config.auto_hide {
             let was_auto_hidden = self.hide.auto;
@@ -655,7 +667,10 @@ impl App {
             if was_auto_hidden && !self.is_hidden() {
                 self.springs.hide.velocity = -0.65;
             }
-        } else if media_is_playing && !self.components_hidden && self.hide.auto && !self.hide.manual
+        } else if (media_is_playing || self.ctx_mgr.timer_active())
+            && !self.components_hidden
+            && self.hide.auto
+            && !self.hide.manual
         {
             self.hide.auto = false;
             self.idle_timer = Instant::now();
@@ -1016,7 +1031,21 @@ impl App {
 
     fn schedule_next_frame(&mut self, window: &WindowRef, now: Instant, pacing: FramePacing) {
         let should_periodic_redraw = self.periodic_effect_redraw_due();
+        let compact_timer = if !self.expanded
+            && !self.is_hidden()
+            && !self.components_hidden
+            && !self.compact_overlay.is_visible()
+        {
+            match self.ctx_mgr.current_mini() {
+                Some(winisland_core::context::MiniContent::Timer(timer)) => Some(timer),
+                _ => None,
+            }
+        } else {
+            None
+        };
         let transition_active = self.springs.any_animating()
+            || self.compact_overlay.is_timer_finished_animating()
+            || (compact_timer.is_some() && crate::ui::compact::timer::countdown_is_animating())
             || self.multitask.is_animating()
             || self.device_indicators.is_animating()
             || self
@@ -1028,9 +1057,11 @@ impl App {
             || self.is_dragging
             || self.seek.active
             || self.is_right_dragging;
-        let resource_usage_active = self.resource_usage_animating();
+        let timer_alert_visible = self.compact_overlay.is_timer_finished_visible();
+        let resource_usage_active = !timer_alert_visible && self.resource_usage_animating();
         let compact_components_visible = self.expanded || !self.components_hidden;
-        let playback_active = !self.is_hidden()
+        let playback_active = !timer_alert_visible
+            && !self.is_hidden()
             && compact_components_visible
             && pacing.media_is_playing
             && (!self.expanded || self.page_visible(ExpandedPage::Music));
@@ -1040,9 +1071,10 @@ impl App {
             && self.current_media_info().thumbnail.is_some();
         let interactive_active = (pacing.is_hovering_visible
             && (!self.expanded || self.page_visible(ExpandedPage::Music)))
-            || pacing.compact_overlay_visible
+            || (pacing.compact_overlay_visible && !timer_alert_visible)
             || pacing.passive_reveal_active
             || self.right_press_cursor.is_some()
+            || compact_timer.is_some_and(|timer| !timer.paused)
             || (self.expanded
                 && self.page_visible(ExpandedPage::Timer)
                 && crate::ui::expanded::timer_view::needs_frames());

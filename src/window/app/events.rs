@@ -274,7 +274,8 @@ impl App {
                             media_info.is_playing,
                         );
                         self.audio.set_gate_override(music_active && !is_hidden);
-                        self.ctx_mgr.set_smtc_active(music_active);
+                        self.ctx_mgr
+                            .set_smtc_state(music_active, music_active && media_info.is_playing);
                         let _ = self.ctx_mgr.tick();
                         if v2_widgets_changed {
                             let widgets = self.widget_mgr.configurable_widgets();

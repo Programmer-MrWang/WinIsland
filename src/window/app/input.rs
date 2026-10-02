@@ -119,6 +119,34 @@ impl App {
             );
 
         if !self.expanded
+            && !self.is_hidden()
+            && is_hovering_visible
+            && self.compact_overlay.is_timer_finished_visible()
+        {
+            if self.compact_overlay.timer_finished_close_hit(
+                rel_x as f32,
+                rel_y as f32,
+                winisland_render::Rect::from_xywh(
+                    current_island_x as f32,
+                    current_island_y as f32,
+                    self.springs.w.value,
+                    self.springs.h.value,
+                ),
+                self.config.compact_scale,
+            ) && self.compact_overlay.dismiss_timer_finished()
+            {
+                crate::ui::expanded::timer_view::apply_action(
+                    crate::ui::expanded::timer_view::TimerAction::Cancel,
+                );
+            }
+            self.idle_timer = Instant::now();
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+            return;
+        }
+
+        if !self.expanded
             && is_hovering_visible
             && let Some(hit) = self.compact_overlay.link_hit(
                 rel_x as f32,
@@ -485,6 +513,14 @@ impl App {
                     self.reveal_island();
                 } else {
                     self.expand();
+                    if matches!(
+                        self.ctx_mgr.current_mini(),
+                        Some(winisland_core::context::MiniContent::Timer(_))
+                    ) && self.expanded_pages().contains(&ExpandedPage::Timer)
+                    {
+                        self.current_page = ExpandedPage::Timer;
+                        self.snap_to_current_page();
+                    }
                 }
             } else if self.springs.hide.value > 0.3 {
                 self.hide.manual = true;

@@ -405,7 +405,20 @@ impl App {
         dt: f32,
     ) -> f32 {
         let compact = !self.expanded;
-        let target_base_w = if music_active && compact && !self.is_width_hiding() {
+        let timer_width = match self.ctx_mgr.current_mini() {
+            Some(winisland_core::context::MiniContent::Timer(timer)) => Some(
+                crate::ui::compact::timer::countdown_width(timer, self.config.base_width),
+            ),
+            _ => None,
+        };
+        let target_base_w = if compact
+            && !self.components_hidden
+            && !self.is_width_hiding()
+            && timer_width.is_some()
+        {
+            self.lyrics.scroll_offset = 0.0;
+            timer_width.unwrap_or(self.config.base_width)
+        } else if music_active && compact && !self.is_width_hiding() {
             let has_visible_lyrics = self.config.show_lyrics
                 && (!self.lyrics.current_text.is_empty()
                     || (!self.lyrics.old_text.is_empty() && self.lyrics.transition < 1.0));

@@ -7,12 +7,15 @@ use std::time::Instant;
 #[derive(Debug, Clone, Copy)]
 pub enum MiniContent<'a> {
     Music,
+    Timer(TimerContent),
     Plugin(&'a PluginContext),
 }
 
 pub struct ContextManager {
     plugin_contexts: Vec<PluginContext>,
     smtc_active: bool,
+    smtc_playing: bool,
+    timer: Option<TimerContent>,
 }
 
 impl Default for ContextManager {
@@ -26,11 +29,32 @@ impl ContextManager {
         Self {
             plugin_contexts: Vec::new(),
             smtc_active: false,
+            smtc_playing: false,
+            timer: None,
         }
     }
 
     pub fn set_smtc_active(&mut self, active: bool) {
         self.smtc_active = active;
+    }
+
+    pub fn set_smtc_state(&mut self, active: bool, playing: bool) -> bool {
+        let playing = active && playing;
+        let changed = self.smtc_active != active || self.smtc_playing != playing;
+        self.smtc_active = active;
+        self.smtc_playing = playing;
+        changed
+    }
+
+    pub fn set_timer(&mut self, timer: Option<TimerContent>) -> bool {
+        let display = |timer: TimerContent| (timer.remaining_secs(), timer.total, timer.paused);
+        let changed = self.timer.map(display) != timer.map(display);
+        self.timer = timer;
+        changed
+    }
+
+    pub fn timer_active(&self) -> bool {
+        self.timer.is_some()
     }
 
     pub fn upsert_context(&mut self, context: PluginContext) {
@@ -60,7 +84,22 @@ impl ContextManager {
         {
             return Some(MiniContent::Plugin(context));
         }
-        self.smtc_active.then_some(MiniContent::Music)
+        let music = self.smtc_active.then_some((
+            if self.smtc_playing {
+                Priority::High
+            } else {
+                Priority::Low
+            },
+            MiniContent::Music,
+        ));
+        let timer = self
+            .timer
+            .map(|timer| (Priority::Medium, MiniContent::Timer(timer)));
+        [music, timer]
+            .into_iter()
+            .flatten()
+            .max_by_key(|(priority, _)| *priority)
+            .map(|(_, content)| content)
     }
 
     pub fn tick(&mut self) -> bool {

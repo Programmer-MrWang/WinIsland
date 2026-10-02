@@ -1,9 +1,10 @@
 mod brightness;
 mod link;
 mod notification;
+pub(crate) mod timer;
 mod volume;
 
-use winisland_render::{Painter, Rect};
+use winisland_render::{Painter, Point, Rect};
 
 pub use self::link::LinkHit;
 pub(crate) use self::link::extract_link;
@@ -11,6 +12,7 @@ pub(crate) use self::link::extract_link;
 use self::brightness::BrightnessMonitor;
 use self::link::LinkIndicator;
 use self::notification::{NotificationIndicator, NotificationMonitor};
+use self::timer::TimerFinishedIndicator;
 use self::volume::{VolumeIndicator, VolumeMonitor};
 
 #[derive(Clone, Copy)]
@@ -42,9 +44,11 @@ pub struct CompactOverlay {
     notification_monitor: NotificationMonitor,
     notification_indicator: NotificationIndicator,
     link_indicator: LinkIndicator,
+    timer_finished: TimerFinishedIndicator,
 }
 
 enum ActiveCompactOverlay<'a> {
+    TimerFinished(&'a TimerFinishedIndicator),
     Link(&'a LinkIndicator),
     Notification(&'a NotificationIndicator),
     Volume(&'a VolumeIndicator),
@@ -54,6 +58,9 @@ enum ActiveCompactOverlay<'a> {
 impl ActiveCompactOverlay<'_> {
     fn target_size(&self, base_width: f32, base_height: f32, scale: f32) -> CompactSize {
         match self {
+            Self::TimerFinished(_) => {
+                TimerFinishedIndicator::target_size(base_width, base_height, scale)
+            }
             Self::Link(_) => LinkIndicator::target_size(base_width, base_height, scale),
             Self::Notification(_) => {
                 NotificationIndicator::target_size(base_width, base_height, scale)
@@ -65,6 +72,7 @@ impl ActiveCompactOverlay<'_> {
 
     fn draw(&self, painter: Painter<'_>, rect: Rect, scale: f32, alpha: f32) {
         match self {
+            Self::TimerFinished(indicator) => indicator.draw(painter, rect, scale, alpha),
             Self::Link(indicator) => indicator.draw(painter, rect, scale, alpha),
             Self::Notification(indicator) => indicator.draw(painter, rect, scale, alpha),
             Self::Volume(indicator) => indicator.draw(painter, rect, scale, alpha),
@@ -85,11 +93,42 @@ impl CompactOverlay {
             notification_monitor: NotificationMonitor::default(),
             notification_indicator: NotificationIndicator::default(),
             link_indicator: LinkIndicator::default(),
+            timer_finished: TimerFinishedIndicator::default(),
         }
     }
 
     pub fn show_link(&mut self, url: String) {
         self.link_indicator.show(url);
+    }
+
+    pub fn show_timer_finished(&mut self) {
+        self.finish_volume_drag();
+        self.finish_brightness_drag();
+        self.timer_finished.show();
+    }
+
+    pub fn clear_timer_finished(&mut self) {
+        self.timer_finished.clear();
+    }
+
+    pub fn update_timer_finished(&mut self) -> bool {
+        self.timer_finished.update()
+    }
+
+    pub fn is_timer_finished_visible(&self) -> bool {
+        self.timer_finished.is_visible()
+    }
+
+    pub fn is_timer_finished_animating(&self) -> bool {
+        self.timer_finished.is_animating()
+    }
+
+    pub fn timer_finished_close_hit(&self, x: f32, y: f32, rect: Rect, scale: f32) -> bool {
+        self.timer_finished.hit_close(Point::new(x, y), rect, scale)
+    }
+
+    pub fn dismiss_timer_finished(&mut self) -> bool {
+        self.timer_finished.close()
     }
 
     pub fn is_link_prompt_active(&self) -> bool {
@@ -185,7 +224,7 @@ impl CompactOverlay {
     }
 
     pub fn begin_volume_drag(&mut self, x: f32, y: f32, rect: Rect, scale: f32) -> bool {
-        if self.last_level_is_brightness
+        if !matches!(self.active(), Some(ActiveCompactOverlay::Volume(_)))
             || !self.volume_monitor.can_set_level()
             || !self.volume_indicator.begin_drag(x, y, rect, scale)
         {
@@ -210,7 +249,7 @@ impl CompactOverlay {
     }
 
     pub fn begin_brightness_drag(&mut self, x: f32, y: f32, rect: Rect, scale: f32) -> bool {
-        if !self.last_level_is_brightness
+        if !matches!(self.active(), Some(ActiveCompactOverlay::Brightness(_)))
             || !self.brightness_monitor.snapshot().available
             || !self.brightness_indicator.begin_drag(x, y, rect, scale)
         {
@@ -282,7 +321,9 @@ impl CompactOverlay {
     }
 
     fn active(&self) -> Option<ActiveCompactOverlay<'_>> {
-        if self.last_level_is_brightness && self.brightness_indicator.is_visible() {
+        if self.timer_finished.is_visible() {
+            Some(ActiveCompactOverlay::TimerFinished(&self.timer_finished))
+        } else if self.last_level_is_brightness && self.brightness_indicator.is_visible() {
             Some(ActiveCompactOverlay::Brightness(&self.brightness_indicator))
         } else if self.volume_indicator.is_visible() {
             Some(ActiveCompactOverlay::Volume(&self.volume_indicator))

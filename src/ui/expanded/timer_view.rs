@@ -1,7 +1,9 @@
 use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
+use crate::ui::rolling_time::{RollingTime, TimeAnchor};
 use crate::ui::widget::expanded::{draw_widget_text_centered, widget_grid_layout};
+use winisland_core::context::TimerContent;
 use winisland_core::i18n::{tr, tr_args};
 use winisland_render::text::FontManager;
 use winisland_render::{Angle, Painter, Point, Radius, Rect, Rgba, StrokeCap};
@@ -15,16 +17,13 @@ const CHIP_GAP: f32 = 6.0;
 const PRESS_SECS: f32 = 0.26;
 const HOVER_RATE: f32 = 18.0;
 const EASE_RATE: f32 = 9.0;
-const DIGIT_SECS: f32 = 0.3;
 const LABEL_SECS: f32 = 0.22;
 const POP_SECS: f32 = 0.5;
 const FINISHED_PULSE_SECS: f32 = 8.0;
 const SETTLE_EPSILON: f32 = 0.002;
 const CONTROL_COUNT: usize = PRESETS.len() + 3;
-const MAX_DIGITS: usize = 8;
 const MIN_MINUTES: u64 = 1;
 const MAX_MINUTES: u64 = 180;
-const WIDTH_RATE: f32 = 14.0;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TimerAction {
@@ -51,12 +50,6 @@ enum Phase {
     Running { ends_at: Instant },
     Paused { remaining: Duration },
     Finished { at: Instant },
-}
-
-#[derive(Clone, Copy)]
-struct DigitChange {
-    previous: char,
-    started: Instant,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -101,12 +94,7 @@ struct TimerState {
     ring_fraction: f32,
     ring_alpha: f32,
     chips_enabled: f32,
-    digits: [char; MAX_DIGITS],
-    digit_count: usize,
-    digit_changes: [Option<DigitChange>; MAX_DIGITS],
-    departing: [Option<DigitChange>; MAX_DIGITS],
-    text_width: f32,
-    text_width_target: f32,
+    time: RollingTime,
     primary: PrimaryStyle,
     primary_change: Option<(PrimaryStyle, Instant)>,
 }
@@ -122,12 +110,7 @@ thread_local! {
         ring_fraction: 1.0,
         ring_alpha: 0.35,
         chips_enabled: 1.0,
-        digits: [' '; MAX_DIGITS],
-        digit_count: 0,
-        digit_changes: [None; MAX_DIGITS],
-        departing: [None; MAX_DIGITS],
-        text_width: 0.0,
-        text_width_target: 0.0,
+        time: RollingTime::new(),
         primary: PrimaryStyle::Start,
         primary_change: None,
     }) };
@@ -272,13 +255,31 @@ pub fn poll_finished() -> Option<u64> {
     TIMER.with(|cell| {
         let mut timer = cell.borrow_mut();
         let now = Instant::now();
-        match timer.phase {
-            Phase::Running { ends_at } if now >= ends_at => {
-                timer.phase = Phase::Finished { at: now };
-                Some(timer.minutes)
-            }
-            _ => None,
+        let finished = match timer.phase {
+            Phase::Running { ends_at } => now >= ends_at,
+            Phase::Paused { remaining } => remaining.is_zero(),
+            Phase::Idle | Phase::Finished { .. } => false,
+        };
+        if !finished {
+            return None;
         }
+        timer.phase = Phase::Finished { at: now };
+        Some(timer.minutes)
+    })
+}
+
+pub fn compact_content() -> Option<TimerContent> {
+    TIMER.with(|cell| {
+        let timer = cell.borrow();
+        if !matches!(timer.phase, Phase::Running { .. } | Phase::Paused { .. }) {
+            return None;
+        }
+        let left = remaining(timer.phase, timer.minutes, Instant::now());
+        Some(TimerContent {
+            remaining: left,
+            total: total_duration(timer.minutes),
+            paused: matches!(timer.phase, Phase::Paused { .. }),
+        })
     })
 }
 
@@ -309,13 +310,7 @@ pub fn needs_frames() -> bool {
             || timer
                 .primary_change
                 .is_some_and(|(_, started)| progress(started, now, LABEL_SECS).is_some())
-            || timer
-                .digit_changes
-                .iter()
-                .chain(timer.departing.iter())
-                .flatten()
-                .any(|change| progress(change.started, now, DIGIT_SECS).is_some())
-            || (timer.text_width - timer.text_width_target).abs() > 0.25
+            || timer.time.is_animating()
             || (timer.ring_fraction - ring_fraction).abs() > SETTLE_EPSILON
             || (timer.ring_alpha - ring_alpha).abs() > SETTLE_EPSILON
             || (timer.chips_enabled - chips_target).abs() > SETTLE_EPSILON
@@ -415,32 +410,11 @@ struct Frame {
     ring_fraction: f32,
     ring_alpha: f32,
     chips_enabled: f32,
-    digits: [char; MAX_DIGITS],
-    digit_count: usize,
-    digit_changes: [Option<(char, f32)>; MAX_DIGITS],
-    departing: [Option<(char, f32)>; MAX_DIGITS],
-    width_blend: f32,
     primary: PrimaryStyle,
     primary_change: Option<(PrimaryStyle, f32)>,
 }
 
-fn eased_text_width(target: f32, blend: f32) -> f32 {
-    TIMER.with(|cell| {
-        let mut timer = cell.borrow_mut();
-        timer.text_width_target = target;
-        if timer.text_width <= f32::EPSILON {
-            timer.text_width = target;
-        } else {
-            timer.text_width += (target - timer.text_width) * blend;
-            if (target - timer.text_width).abs() <= 0.25 {
-                timer.text_width = target;
-            }
-        }
-        timer.text_width
-    })
-}
-
-fn advance(now: Instant, time_text: &str) -> Frame {
+fn advance(now: Instant) -> Frame {
     TIMER.with(|cell| {
         let mut timer = cell.borrow_mut();
         let dt = timer
@@ -473,49 +447,6 @@ fn advance(now: Instant, time_text: &str) -> Frame {
         };
         approach(&mut timer.chips_enabled, chips_target, ease_blend);
 
-        let chars: Vec<char> = time_text.chars().take(MAX_DIGITS).collect();
-        let old_count = timer.digit_count;
-        let new_count = chars.len();
-        if old_count > 0 && old_count != new_count {
-            let mut shifted = [None; MAX_DIGITS];
-            for (index, slot) in shifted.iter_mut().enumerate().take(new_count) {
-                let old_index = (index + old_count).checked_sub(new_count);
-                *slot = old_index
-                    .filter(|old_index| *old_index < old_count)
-                    .and_then(|old_index| timer.digit_changes[old_index]);
-            }
-            timer.digit_changes = shifted;
-            if new_count < old_count {
-                let removed = old_count - new_count;
-                timer.departing = [None; MAX_DIGITS];
-                for index in 0..removed {
-                    timer.departing[index] = Some(DigitChange {
-                        previous: timer.digits[index],
-                        started: now,
-                    });
-                }
-            }
-        }
-        let previous_digits = timer.digits;
-        for (index, character) in chars.iter().enumerate() {
-            let old_index = (index + old_count).checked_sub(new_count);
-            let previous = match old_index {
-                Some(old_index) if old_index < old_count => previous_digits[old_index],
-                _ if old_count > 0 => ' ',
-                _ => *character,
-            };
-            if previous != *character {
-                timer.digit_changes[index] = Some(DigitChange {
-                    previous,
-                    started: now,
-                });
-            }
-        }
-        timer.digit_count = new_count;
-        for (index, character) in chars.iter().enumerate() {
-            timer.digits[index] = *character;
-        }
-
         let style = PrimaryStyle::of(timer.phase);
         if style != timer.primary {
             timer.primary_change = Some((timer.primary, now));
@@ -534,22 +465,7 @@ fn advance(now: Instant, time_text: &str) -> Frame {
         if primary_change.is_none() {
             timer.primary_change = None;
         }
-        let digit_changes = std::array::from_fn(|index| {
-            timer.digit_changes[index].and_then(|change| {
-                progress(change.started, now, DIGIT_SECS)
-                    .map(|t| (change.previous, ease_out_cubic(t)))
-            })
-        });
-        let departing = std::array::from_fn(|index| {
-            timer.departing[index].and_then(|change| {
-                progress(change.started, now, DIGIT_SECS)
-                    .map(|t| (change.previous, ease_out_cubic(t)))
-            })
-        });
-        let width_blend = 1.0 - (-dt * WIDTH_RATE).exp();
         Frame {
-            departing,
-            width_blend,
             minutes: timer.minutes,
             phase: timer.phase,
             hover: timer.hover,
@@ -557,9 +473,6 @@ fn advance(now: Instant, time_text: &str) -> Frame {
             ring_fraction: timer.ring_fraction,
             ring_alpha: timer.ring_alpha,
             chips_enabled: timer.chips_enabled,
-            digits: timer.digits,
-            digit_count: timer.digit_count,
-            digit_changes,
             primary: timer.primary,
             primary_change,
         }
@@ -573,88 +486,6 @@ fn blend_color(from: Rgba, to: Rgba, amount: f32) -> Rgba {
         mix(from.g(), to.g()),
         mix(from.b(), to.b()),
     )
-}
-
-fn draw_rolling_time(painter: Painter<'_>, frame: &Frame, center: Point, size: f32, color: Rgba) {
-    let fonts = FontManager::global();
-    let digit_width = fonts.measure_str("0", size, true).width();
-    let advance = |character: char| {
-        if character.is_ascii_digit() {
-            digit_width
-        } else {
-            fonts
-                .measure_str(&character.to_string(), size, true)
-                .width()
-                .max(size * 0.25)
-        }
-    };
-    let chars = &frame.digits[..frame.digit_count];
-    let total: f32 = chars.iter().map(|character| advance(*character)).sum();
-    let shown_width = eased_text_width(total, frame.width_blend);
-    let right = center.x + shown_width / 2.0;
-    let mut x = right - total;
-    let travel = size * 0.55;
-    let save_count = painter.save();
-    painter.clip_rect(Rect::from_xywh(
-        center.x - total.max(shown_width),
-        center.y - size * 0.62,
-        total.max(shown_width) * 2.0,
-        size * 1.24,
-    ));
-    let mut buffer = [0u8; 4];
-    let departing: Vec<(char, f32)> = frame.departing.iter().flatten().copied().collect();
-    let mut departing_x = x;
-    for (character, eased) in departing.iter().rev() {
-        let width = advance(*character);
-        departing_x -= width;
-        draw_widget_text_centered(
-            painter,
-            character.encode_utf8(&mut buffer),
-            Rect::from_xywh(
-                departing_x,
-                center.y - size / 2.0 - travel * eased,
-                width,
-                size,
-            ),
-            size,
-            true,
-            color.with_alpha_f(f32::from(color.a()) / 255.0 * (1.0 - eased)),
-        );
-    }
-    for (index, character) in chars.iter().enumerate() {
-        let width = advance(*character);
-        let cell = Rect::from_xywh(x, center.y - size / 2.0, width, size);
-        match frame.digit_changes[index] {
-            Some((previous, eased)) => {
-                draw_widget_text_centered(
-                    painter,
-                    previous.encode_utf8(&mut buffer),
-                    cell.offset(winisland_render::Vec2::new(0.0, -travel * eased)),
-                    size,
-                    true,
-                    color.with_alpha_f(f32::from(color.a()) / 255.0 * (1.0 - eased)),
-                );
-                draw_widget_text_centered(
-                    painter,
-                    character.encode_utf8(&mut buffer),
-                    cell.offset(winisland_render::Vec2::new(0.0, travel * (1.0 - eased))),
-                    size,
-                    true,
-                    color.with_alpha_f(f32::from(color.a()) / 255.0 * eased),
-                );
-            }
-            None => draw_widget_text_centered(
-                painter,
-                character.encode_utf8(&mut buffer),
-                cell,
-                size,
-                true,
-                color,
-            ),
-        }
-        x += width;
-    }
-    painter.restore_to(save_count);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -680,7 +511,7 @@ pub fn draw_timer_page(
     });
     let left = remaining(phase, minutes, now);
     let time_text = format_remaining(left);
-    let frame = advance(now, &time_text);
+    let frame = advance(now);
     let pressed = |action: TimerAction| {
         frame
             .press
@@ -728,13 +559,15 @@ pub fn draw_timer_page(
         _ => 1.0,
     };
     let time_size = fitted_size(&time_text, radius * 0.42, inner_width) * pop;
-    draw_rolling_time(
-        painter,
-        &frame,
-        Point::new(center.x, center.y - time_size * 0.12),
-        time_size,
-        text_color.with_alpha_f(opacity),
-    );
+    TIMER.with(|cell| {
+        cell.borrow_mut().time.draw(
+            painter,
+            &time_text,
+            TimeAnchor::Center(Point::new(center.x, center.y - time_size * 0.12)),
+            time_size,
+            text_color.with_alpha_f(opacity),
+        );
+    });
     let dial_hover = frame.hover[TimerAction::Dial.index()];
     let (caption, caption_color) = match frame.phase {
         Phase::Idle | Phase::Finished { .. } if dial_hover > 0.5 => {
