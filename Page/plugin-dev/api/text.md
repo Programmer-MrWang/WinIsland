@@ -1,6 +1,6 @@
 # Text API
 
-`TextApiV2` measures text using WinIsland's font manager and reads host font-family names. Declare `CAP_TEXT` and query `IFACE_TEXT`. The SDK `host.text()?.measure(text, size, family)` uses weight 400 and upright style; use the raw table for other styles.
+`TextApiV2` measures text using WinIsland's font manager and reads host font-family names. Declare `CAP_TEXT` and query `IFACE_TEXT`. The SDK `host.text()?.measure(text, size, family)` uses weight 400 and upright style. Since crate `0.9.1`, use `host.text()?.measure_style(text, &style)` to match a `TextStyle`'s size, weight, italic style, and font family without calling the raw table.
 
 ## A typical use
 

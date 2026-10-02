@@ -1,6 +1,6 @@
 # Text API
 
-`TextApiV2` 使用 WinIsland 的字体管理器测量文字，并读取宿主字体族名称。声明 `CAP_TEXT` 并查询 `IFACE_TEXT`。SDK `host.text()?.measure(text, size, family)` 使用 400 字重和正体；其他样式使用原始服务表。
+`TextApiV2` 使用 WinIsland 的字体管理器测量文字，并读取宿主字体族名称。声明 `CAP_TEXT` 并查询 `IFACE_TEXT`。SDK `host.text()?.measure(text, size, family)` 使用 400 字重和正体。从 crate `0.9.1` 开始，可通过 `host.text()?.measure_style(text, &style)` 按 `TextStyle` 的字号、字重、斜体和字体族测量，无需调用原始服务表。
 
 ## 一个常见用法
 

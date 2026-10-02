@@ -32,7 +32,8 @@ The SDK wraps common calls; the ABI tables in `src/abi` expose the full interfac
 | `Widget::submit` | Copies a complete draw list into the host and returns its status. Validation and frame preparation happen later; a successful submit does not guarantee that the frame will be displayed. |
 | `Widget::logical_size` | Returns the current logical dimensions. It returns `(0, 0)` if the host call fails; the plugin should skip drawing that frame. The size follows the configured expanded grid and does not shrink during collapse animation. |
 | `Widget::request_redraw`, `LogApi::write` | Best-effort convenience calls that discard host errors. Use the raw ABI table when the status matters. |
-| `TextApi::measure` | Measures with weight 400 and upright style in the requested family. Use the raw `TextApiV2` table for other weights or italic text. |
+| `TextApi::measure` | Measures with weight 400 and upright style in the requested family. |
+| `TextApi::measure_style` | Available since 0.9.1. Measures using a `TextStyle`'s size, weight, italic style, and family through the existing `TextApiV2` table. |
 | `ImageApi::decode`, `upload_rgba`, `album_art` | Return an owned image handle, released on drop. An album-art handle keeps its image after the current cover changes. |
 | `StoreApi::get`, `set`, `delete` | Operate in the plugin's own persistent namespace. `get` returns `None` for an absent key and may report a size error if the value changes between its length query and read. |
 
