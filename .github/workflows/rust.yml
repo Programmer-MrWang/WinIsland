@@ -49,7 +49,8 @@ jobs:
   build-rust:
     needs: changes
     if: >-
-      ((github.event_name == 'workflow_dispatch' && !inputs.docs_only) || needs.changes.outputs.rust == 'true') &&
+      ((github.event_name == 'workflow_dispatch' && !inputs.docs_only) ||
+      (github.event_name == 'push' && needs.changes.outputs.rust == 'true')) &&
       !contains(github.event.head_commit.message, '[ci-skip]') &&
       !contains(github.event.head_commit.message, '[docs]')
     runs-on: windows-latest
@@ -111,6 +112,7 @@ jobs:
         } | ConvertTo-Json
         $json | Out-File -FilePath target/release/version_info.json -Encoding utf8
     - name: Delete Old Nightly Release
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
       run: |
         gh release delete nightly --yes --cleanup-tag
       env:
@@ -161,6 +163,55 @@ jobs:
         run: |
           mkdir -p Page/public/download
           gh release download --repo "${{ github.repository }}" --pattern WinIsland-Setup.exe --dir Page/public/download --clobber
+      - name: Include versioned Store installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+
+          entries = json.loads(Path('Page/store-downloads.json').read_text(encoding='utf-8'))
+          if not isinstance(entries, list):
+              raise ValueError('Store downloads must be a JSON array.')
+          patterns = {
+              'release_tag': r'[A-Za-z0-9][A-Za-z0-9._-]*',
+              'asset': r'[A-Za-z0-9][A-Za-z0-9._-]*\.exe',
+              'version': r'[0-9]+(?:\.[0-9]+){3}',
+              'sha256': r'[0-9a-fA-F]{64}',
+          }
+          versions = set()
+          for entry in entries:
+              if not isinstance(entry, dict):
+                  raise ValueError('Each Store download must be an object.')
+              for field, pattern in patterns.items():
+                  value = entry.get(field)
+                  if not isinstance(value, str) or not re.fullmatch(pattern, value):
+                      raise ValueError(f'Invalid Store download field: {field}')
+              version = entry['version']
+              if any(int(part) > 65535 for part in version.split('.')):
+                  raise ValueError(f'Invalid Windows package version: {version}')
+              if version in versions:
+                  raise ValueError(f'Duplicate Store download version: {version}')
+              versions.add(version)
+
+          for entry in entries:
+              target = Path('Page/public/download') / entry['version'] / 'WinIsland-Setup.exe'
+              target.parent.mkdir(parents=True, exist_ok=True)
+              subprocess.run([
+                  'gh', 'release', 'download', entry['release_tag'],
+                  '--repo', os.environ['GITHUB_REPOSITORY'],
+                  '--pattern', entry['asset'], '--output', str(target), '--clobber',
+              ], check=True)
+              actual_hash = hashlib.sha256(target.read_bytes()).hexdigest()
+              if actual_hash != entry['sha256'].lower():
+                  raise ValueError(f'SHA-256 mismatch for Store installer {entry["version"]}')
+              print(f'Included Store installer {entry["version"]}: {actual_hash}')
+          PY
       - name: Build website
         working-directory: Page
         run: npm run build

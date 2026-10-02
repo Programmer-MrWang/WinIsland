@@ -29,7 +29,7 @@ impl SharedState {
         let mask = 3 << shift;
         let previous = self
             .bits
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |bits| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |bits| {
                 Some((bits & !mask) | (value << shift))
             })
             .unwrap_or_else(|bits| bits);
