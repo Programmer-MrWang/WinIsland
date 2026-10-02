@@ -2,6 +2,20 @@
 
 此更新日志列出 `winisland-plugin-api` 各版本的变更。网站将此文件显示为插件 API 更新日志。
 
+## 0.10.0 - 2026 年 10 月 2 日
+
+新增：
+
+- `SystemApiV2`、`IFACE_SYSTEM` 和 `CAP_SYSTEM`，提供本地日期时间、公历转中国农历，以及当前 WinIsland 界面语言
+- `LocalDateTimeV2` 和 `LunarDateV2` ABI 数据类型，以及新类型和服务表的编译期布局断言
+- Rust SDK 的 `Host::system()` 和 `SystemApi::{local_datetime, lunar_date, current_language}`；农历无转换结果时返回 `None`，无效日期或服务失败时返回错误
+- Rust SDK 的 `Rgba::with_alpha(alpha)`，替换颜色的透明度并保留 RGB 通道
+
+变更：
+
+- 保留 ABI v2 及现有入口、描述符、服务表和绘制协议布局；使用新增系统能力时，宿主必须实现 `IFACE_SYSTEM`
+- 内置日历改为通过独立的 `winisland-plugin-calendar` crate 使用公开 SDK，仅依赖 `winisland-plugin-api`
+
 ## 0.9.1 - 2026 年 10 月 2 日
 
 新增：

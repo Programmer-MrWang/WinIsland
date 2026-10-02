@@ -2,6 +2,20 @@
 
 This changelog lists `winisland-plugin-api` versions. The website displays this file as its plugin API update log.
 
+## 0.10.0 - Oct 2, 2026
+
+Added:
+
+- `SystemApiV2`, `IFACE_SYSTEM`, and `CAP_SYSTEM` for local date/time, Gregorian-to-Chinese-lunar conversion, and the current WinIsland UI language
+- `LocalDateTimeV2` and `LunarDateV2` ABI value types, with compile-time layout assertions for the types and service table
+- Rust SDK `Host::system()` and `SystemApi::{local_datetime, lunar_date, current_language}`; lunar conversion returns `None` when no result is available and reports invalid dates or service failures as errors
+- `Rgba::with_alpha(alpha)` in the Rust SDK to replace a color's alpha while preserving its RGB channels
+
+Changed:
+
+- Kept ABI v2 and all existing entry-point, descriptor, service-table, and drawing-protocol layouts; the new system capability requires a host that implements `IFACE_SYSTEM`
+- The built-in Calendar now uses the public SDK from an independent `winisland-plugin-calendar` crate, depending only on `winisland-plugin-api`
+
 ## 0.9.1 - Oct 2, 2026
 
 Added:
