@@ -9,7 +9,7 @@ use winisland_render::Painter;
 use activities::Activity;
 
 pub(crate) fn side_extent(scale: f32, compact_height: f32) -> f32 {
-    compact_height + 20.0 * scale
+    compact_height * 1.1 + 20.0 * scale
 }
 
 pub(crate) fn draw_content(

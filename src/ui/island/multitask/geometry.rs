@@ -33,9 +33,7 @@ pub(crate) fn surface(
     } else {
         frame.separation
     };
-    let resting_height = (compact_height * 0.86)
-        .clamp(16.0 * scale, 30.0 * scale)
-        .min(island.height() * 0.95);
+    let resting_height = compact_height.min(island.height()).max(0.0);
     let resting_width = frame.task.content.width(resting_height, scale);
     let shrink = 0.65 + separation * 0.35;
     let height = resting_height * shrink;

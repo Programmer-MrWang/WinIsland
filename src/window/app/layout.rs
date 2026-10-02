@@ -25,16 +25,17 @@ impl App {
             self.config.base_height,
             compact_scale,
         );
+        let compact_height = self.config.base_height * compact_scale;
         let compact_lyric_height = if self.config.show_secondary_lyrics {
-            crate::ui::island::mini_lyric_pair_height(self.config.font_size, compact_scale)
+            compact_height.max(crate::ui::island::mini_lyric_pair_height(
+                self.config.font_size,
+                compact_scale,
+            ))
         } else {
-            self.config.base_height * compact_scale
+            compact_height
         };
         let multitask_extent = if self.config.device_status_indicators {
-            crate::ui::island::multitask::side_extent(
-                compact_scale,
-                self.config.base_height * compact_scale,
-            )
+            crate::ui::island::multitask::side_extent(compact_scale, compact_lyric_height)
         } else {
             0.0
         };

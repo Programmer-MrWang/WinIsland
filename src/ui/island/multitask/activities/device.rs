@@ -57,20 +57,23 @@ pub(super) fn width(height: f32) -> f32 {
 pub(super) fn draw(
     painter: Painter<'_>,
     rect: Rect,
-    scale: f32,
+    _scale: f32,
     opacity: f32,
     camera: f32,
     microphone: f32,
 ) {
+    let diameter = rect.width().min(rect.height());
+    let dot_radius = diameter / 9.0;
+    let dot_spacing = diameter * 0.35;
     let dots = [
         (camera, -microphone, Rgba::from_rgb(48, 209, 88)),
         (microphone, camera, Rgba::from_rgb(255, 159, 10)),
     ];
     for (visibility, offset, color) in dots {
-        let x = rect.center_x() + offset * 0.5 * (10.0 * scale).min(rect.width() * 0.35);
+        let x = rect.center_x() + offset * 0.5 * dot_spacing;
         painter.fill_circle(
             Point::new(x, rect.center_y()),
-            3.0 * scale,
+            dot_radius,
             color.with_alpha_f(opacity * visibility),
         );
     }
