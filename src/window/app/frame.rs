@@ -793,6 +793,11 @@ impl App {
         if self.fullscreen_hide_active() {
             return;
         }
+        if self.expanded && self.expanded_pages().is_empty() {
+            self.expanded = false;
+            self.reset_page();
+            window.request_redraw();
+        }
         let pressing = self.input_pressed();
         if !pressing {
             self.expanded_press_started_inside = false;
@@ -1054,16 +1059,7 @@ impl App {
             log::warn!("Working set trim failed: {error}");
         }
         let frame_interval = if transition_active {
-            self.animation_frame_interval
-        } else if self.expanded
-            && (playback_active
-                || dynamic_effect_active
-                || interactive_active
-                || resource_usage_active)
-        {
-            self.aligned_frame_interval(Duration::from_secs_f64(
-                1.0 / f64::from(self.config.expanded_idle_fps),
-            ))
+            self.display_frame_interval
         } else if playback_active || dynamic_effect_active {
             self.aligned_frame_interval(PLAYBACK_FRAME_INTERVAL)
         } else if interactive_active || resource_usage_active {

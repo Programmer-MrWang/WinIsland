@@ -54,7 +54,7 @@ impl App {
             if let Some(monitor) = monitor_opt {
                 let mon_size = monitor.size();
                 let mon_pos = monitor.position();
-                self.update_animation_frame_interval(&monitor);
+                self.update_display_frame_interval(&monitor);
                 self.geom.monitor_size = (mon_size.width, mon_size.height);
                 self.geom.monitor_pos = (mon_pos.x, mon_pos.y);
                 self.migrate_legacy_dock_position(mon_pos, mon_size);

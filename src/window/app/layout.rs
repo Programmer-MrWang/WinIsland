@@ -52,20 +52,13 @@ impl App {
     pub(super) fn get_target_monitor(window: &WindowRef, monitor_index: i32) -> Option<MonitorRef> {
         window.target_monitor(monitor_index)
     }
-    pub(super) fn update_animation_frame_interval(&mut self, monitor: &MonitorRef) {
+    pub(super) fn update_display_frame_interval(&mut self, monitor: &MonitorRef) {
         let refresh_rate_millihertz = monitor
             .refresh_rate_millihertz()
             .filter(|refresh_rate| *refresh_rate > 0)
             .unwrap_or(DEFAULT_ANIMATION_REFRESH_RATE_MILLIHERTZ);
         self.display_frame_interval =
             Duration::from_nanos(1_000_000_000_000u64 / u64::from(refresh_rate_millihertz));
-        let rate = if self.config.animation_fps == 0 {
-            refresh_rate_millihertz
-        } else {
-            refresh_rate_millihertz.min(self.config.animation_fps.saturating_mul(1_000))
-        };
-        self.animation_frame_interval =
-            Duration::from_nanos(1_000_000_000_000u64 / u64::from(rate));
     }
 
     pub(super) fn enforce_overlay_window(window_ref: &WindowRef) {

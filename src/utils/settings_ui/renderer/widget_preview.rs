@@ -158,7 +158,12 @@ fn draw_card_feedback(
     );
 }
 
-fn draw_library_tile_surface(painter: Painter<'_>, rect: Rect, hover: f32, theme: &SettingsTheme) {
+pub(crate) fn draw_library_tile_surface(
+    painter: Painter<'_>,
+    rect: Rect,
+    hover: f32,
+    theme: &SettingsTheme,
+) {
     let accent = settings_color(theme.accent);
     painter.fill_round_rect(
         Rect::from_xywh(rect.left, rect.top + 2.0, rect.width(), rect.height()),
@@ -358,7 +363,7 @@ fn draw_grid(
     }
 }
 
-fn draw_delete_button(painter: Painter<'_>, x: f32, y: f32, scale: f32) {
+pub(crate) fn draw_delete_button(painter: Painter<'_>, x: f32, y: f32, scale: f32) {
     let radius = (8.0 * scale).max(7.0);
     let stroke_width = (1.5 * scale).max(1.25);
     let arm = (3.0 * scale).max(2.5);

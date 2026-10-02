@@ -20,7 +20,7 @@ pub fn default_expanded_page_order() -> Vec<ExpandedPageKind> {
 
 pub fn normalize_expanded_page_order(order: &mut Vec<ExpandedPageKind>) -> bool {
     let mut normalized = Vec::with_capacity(ExpandedPageKind::ALL.len());
-    for page in order.iter().chain(ExpandedPageKind::ALL.iter()) {
+    for page in order.iter() {
         if !normalized.contains(page) {
             normalized.push(*page);
         }

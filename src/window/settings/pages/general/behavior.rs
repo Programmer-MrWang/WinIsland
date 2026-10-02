@@ -55,13 +55,8 @@ impl SettingsApp {
         );
         page.setting(
             &self.config,
-            AppConfigField::ReplaceNativeVolumeFlyout,
-            caps.input_hooks && caps.volume_control,
-        );
-        page.setting(
-            &self.config,
-            AppConfigField::BrightnessOverlayEnabled,
-            caps.brightness_control,
+            AppConfigField::SystemControlsOverlay,
+            (caps.input_hooks && caps.volume_control) || caps.brightness_control,
         );
         page.setting(&self.config, AppConfigField::ClipboardLinkPrompt, true);
         page.setting(&self.config, AppConfigField::DeviceStatusIndicators, true);

@@ -652,6 +652,7 @@ impl SettingsApp {
     fn handle_focus_changed(&mut self, focused: bool) {
         self.focused = focused;
         if !focused {
+            self.cancel_page_order_drag();
             self.commit_number_input();
             self.dots_hovered = false;
             self.scroll_dragging = false;
@@ -763,6 +764,9 @@ impl SettingsApp {
     }
 
     fn handle_pressed_key(&mut self, key: &Key) {
+        if matches!(key, Key::Escape) && self.cancel_page_order_drag() {
+            return;
+        }
         if self.resource_editor_open {
             if matches!(key, Key::Escape) {
                 if self.popup.take().is_some() {

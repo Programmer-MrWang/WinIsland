@@ -218,6 +218,7 @@ impl SettingsApp {
             _ => return false,
         };
         self.page_history_index = next_index;
+        self.cancel_page_order_drag();
         self.active_page = self.page_history[next_index];
         if self.active_page != PLUGINS_PAGE_INDEX {
             self.selected_plugin_id = None;
@@ -233,6 +234,7 @@ impl SettingsApp {
         if self.active_page == page {
             return;
         }
+        self.cancel_page_order_drag();
         self.page_history.truncate(self.page_history_index + 1);
         self.page_history.push(page);
         self.page_history_index = self.page_history.len() - 1;

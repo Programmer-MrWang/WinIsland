@@ -71,6 +71,13 @@ impl App {
     }
 
     pub(super) fn snap_to_current_page(&mut self) {
+        let pages = self.expanded_pages();
+        if !pages.contains(&self.current_page) {
+            self.current_page = pages.first().copied().unwrap_or(ExpandedPage::Widgets);
+        }
+        if pages.is_empty() {
+            self.expanded = false;
+        }
         self.springs.view.value = self.target_page_position();
         self.springs.view.velocity = 0.0;
     }
@@ -105,6 +112,9 @@ impl App {
         let shown = previous.get(shown_index).copied();
         self.music_page_available = available;
         let pages = self.expanded_pages();
+        if pages.is_empty() {
+            self.expanded = false;
+        }
         match shown.and_then(|page| pages.iter().position(|candidate| *candidate == page)) {
             Some(index) => self.springs.view.value = index as f32 + (view - shown_index as f32),
             None => {

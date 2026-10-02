@@ -52,6 +52,28 @@ pub fn load_config_at(path: &Path) -> AppConfig {
         }
     };
     if let Ok(table) = toml::from_str::<toml::Table>(&content) {
+        if !table.contains_key("system_controls_overlay")
+            && (table.contains_key("replace_native_volume_flyout")
+                || table.contains_key("brightness_overlay_enabled"))
+        {
+            let volume = table
+                .get("replace_native_volume_flyout")
+                .and_then(toml::Value::as_bool)
+                .unwrap_or(true);
+            let brightness = table
+                .get("brightness_overlay_enabled")
+                .and_then(toml::Value::as_bool)
+                .unwrap_or(true);
+            config.system_controls_overlay = volume || brightness;
+        }
+        migrated |= [
+            "animation_fps",
+            "expanded_idle_fps",
+            "replace_native_volume_flyout",
+            "brightness_overlay_enabled",
+        ]
+        .iter()
+        .any(|key| table.contains_key(*key));
         if !table.contains_key("fullscreen_auto_hide") {
             config.fullscreen_auto_hide = config.auto_hide;
             migrated = true;
@@ -114,10 +136,6 @@ pub fn load_config_at(path: &Path) -> AppConfig {
     };
     config.expanded_width = config.expanded_width.clamp(200.0, 2000.0);
     config.expanded_height = config.expanded_height.clamp(100.0, 1000.0);
-    if config.animation_fps != 0 {
-        config.animation_fps = config.animation_fps.clamp(30, 240);
-    }
-    config.expanded_idle_fps = config.expanded_idle_fps.clamp(15, 120);
     let resource_span =
         set_resource_widget_span(config.resource_widget_columns, config.resource_widget_rows);
     if (config.resource_widget_columns, config.resource_widget_rows) != resource_span {

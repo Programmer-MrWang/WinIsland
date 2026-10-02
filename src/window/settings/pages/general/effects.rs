@@ -20,8 +20,6 @@ impl SettingsApp {
         page.group_start();
         page.setting(&self.config, AppConfigField::SettingsTheme, true);
         page.setting(&self.config, AppConfigField::MotionBlur, true);
-        page.setting(&self.config, AppConfigField::AnimationFps, true);
-        page.setting(&self.config, AppConfigField::ExpandedIdleFps, true);
         page.group_end();
         page.group_start();
         let host_backdrop = crate::platform::capabilities().host_backdrop;

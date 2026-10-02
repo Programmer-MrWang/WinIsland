@@ -542,6 +542,9 @@ impl App {
     }
 
     pub(super) fn expand(&mut self) {
+        if self.expanded_pages().is_empty() {
+            return;
+        }
         self.compact_overlay.dismiss_link();
         if self.hide.has_hidden_reason() {
             self.reveal_island();

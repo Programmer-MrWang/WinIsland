@@ -45,18 +45,6 @@ pub struct AppConfig {
     #[educe(Default = true)]
     #[setting(toggle)]
     pub motion_blur: bool,
-    #[educe(Default = 90)]
-    #[setting(choice(
-        30 => "30 FPS",
-        60 => "60 FPS",
-        90 => "90 FPS",
-        120 => "120 FPS",
-        0 => "frame_rate_native",
-    ))]
-    pub animation_fps: u32,
-    #[educe(Default = 60)]
-    #[setting(choice(30 => "30 FPS", 45 => "45 FPS", 60 => "60 FPS", 90 => "90 FPS"))]
-    pub expanded_idle_fps: u32,
     #[educe(Default = "default")]
     pub island_style: String,
     #[educe(Default = true)]
@@ -148,10 +136,7 @@ pub struct AppConfig {
     pub device_status_indicators: bool,
     #[educe(Default = true)]
     #[setting(toggle)]
-    pub replace_native_volume_flyout: bool,
-    #[educe(Default = true)]
-    #[setting(toggle, label = "brightness_overlay")]
-    pub brightness_overlay_enabled: bool,
+    pub system_controls_overlay: bool,
     #[educe(Default = true)]
     #[setting(toggle, label = "clipboard_link_prompt")]
     pub clipboard_link_prompt: bool,

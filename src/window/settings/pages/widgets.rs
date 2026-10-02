@@ -9,12 +9,12 @@ use crate::utils::settings_ui::{
     widget_preview_height, widget_preview_hit_test,
 };
 use winisland_core::config::{
-    WidgetKind, clear_compact_widget_slot, clear_plugin_widget, clear_widget_slot,
-    place_builtin_widget, place_compact_widget, place_plugin_widget, plugin_widget_covering_slot,
-    widget_covering_slot,
+    ExpandedPageKind, WidgetKind, clear_compact_widget_slot, clear_plugin_widget,
+    clear_widget_slot, place_builtin_widget, place_compact_widget, place_plugin_widget,
+    plugin_widget_covering_slot, widget_covering_slot,
 };
 
-use super::super::page_order::page_order_list_height;
+use super::super::page_order::page_library_height;
 use super::super::{SETTINGS_HEADER_H, SIDEBAR_W, SettingsApp, WIDGETS_PAGE_INDEX};
 use super::SettingsPage;
 use crate::utils::settings_ui::WidgetEditorMode;
@@ -67,10 +67,19 @@ impl SettingsApp {
         let mut page = SettingsPage::new();
         page.section(tr("page_order"));
         page.push(SettingsItem::Custom {
-            height: page_order_list_height(self.config.expanded_page_order.len()),
+            height: self.page_order_display_height(),
         });
         page.spacer(10.0);
         page.row_label(tr("page_order_hint"));
+        page.section(tr("page_library_title"));
+        page.push(SettingsItem::Custom {
+            height: page_library_height(
+                ExpandedPageKind::ALL
+                    .len()
+                    .saturating_sub(self.config.expanded_page_order.len()),
+                self.content_width(),
+            ),
+        });
         page
     }
 
@@ -116,6 +125,7 @@ impl SettingsApp {
             return false;
         };
         if mode != self.widget_editor_mode {
+            self.cancel_page_order_drag();
             self.widget_editor_mode = mode;
             self.widget_dragging = None;
             self.compact_widget_dragging = None;

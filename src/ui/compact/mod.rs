@@ -37,7 +37,7 @@ pub struct CompactOverlay {
     volume_indicator: VolumeIndicator,
     brightness_monitor: BrightnessMonitor,
     brightness_indicator: VolumeIndicator,
-    brightness_overlay_enabled: bool,
+    system_controls_overlay_enabled: bool,
     last_level_is_brightness: bool,
     notification_monitor: NotificationMonitor,
     notification_indicator: NotificationIndicator,
@@ -74,13 +74,13 @@ impl ActiveCompactOverlay<'_> {
 }
 
 impl CompactOverlay {
-    pub fn new(replace_native_volume_flyout: bool, brightness_overlay_enabled: bool) -> Self {
+    pub fn new(system_controls_overlay_enabled: bool) -> Self {
         Self {
-            volume_monitor: VolumeMonitor::new(replace_native_volume_flyout),
+            volume_monitor: VolumeMonitor::new(system_controls_overlay_enabled),
             volume_indicator: VolumeIndicator::default(),
             brightness_monitor: BrightnessMonitor::new(),
             brightness_indicator: VolumeIndicator::new_brightness(),
-            brightness_overlay_enabled,
+            system_controls_overlay_enabled,
             last_level_is_brightness: false,
             notification_monitor: NotificationMonitor::default(),
             notification_indicator: NotificationIndicator::default(),
@@ -110,13 +110,10 @@ impl CompactOverlay {
         self.link_indicator.close();
     }
 
-    pub fn set_native_volume_flyout_replacement_enabled(&mut self, enabled: bool) {
+    pub fn set_system_controls_overlay_enabled(&mut self, enabled: bool) {
+        self.system_controls_overlay_enabled = enabled;
         self.volume_monitor
             .set_native_flyout_replacement_enabled(enabled);
-    }
-
-    pub fn set_brightness_overlay_enabled(&mut self, enabled: bool) {
-        self.brightness_overlay_enabled = enabled;
     }
 
     pub fn update(
@@ -131,8 +128,13 @@ impl CompactOverlay {
             crate::platform::update_capabilities(|caps| caps.brightness_control = true);
             caps.brightness_control = true;
         }
-        let volume_state = if caps.volume_control {
+        let overlay_state = if self.system_controls_overlay_enabled {
             volume_state
+        } else {
+            CompactOverlayState::Discard
+        };
+        let volume_state = if caps.volume_control {
+            overlay_state
         } else {
             CompactOverlayState::Discard
         };
@@ -142,22 +144,21 @@ impl CompactOverlay {
         );
         let volume_changed = self
             .volume_indicator
-            .update(self.volume_monitor.snapshot(), volume_state);
-        let brightness_changed = self.brightness_overlay_enabled
+            .update(self.volume_monitor.snapshot(), volume_state)
+            && self.system_controls_overlay_enabled
+            && caps.volume_control;
+        let brightness_state = if caps.brightness_control && brightness.available {
+            overlay_state
+        } else {
+            CompactOverlayState::Discard
+        };
+        let brightness_changed = self.brightness_indicator.update_brightness(
+            brightness.level,
+            brightness.revision,
+            brightness_state,
+        ) && self.system_controls_overlay_enabled
             && caps.brightness_control
-            && brightness.available
-            && self.brightness_indicator.update_brightness(
-                brightness.level,
-                brightness.revision,
-                volume_state,
-            );
-        if !self.brightness_overlay_enabled || !caps.brightness_control {
-            self.brightness_indicator.update_brightness(
-                brightness.level,
-                brightness.revision,
-                CompactOverlayState::Discard,
-            );
-        }
+            && brightness.available;
         if volume_changed {
             self.last_level_is_brightness = false;
         }

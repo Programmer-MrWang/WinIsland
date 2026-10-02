@@ -7,9 +7,11 @@ use winisland_render::{Painter, Point, Radius, Rect, Rgba, StrokeCap};
 
 use super::{SETTINGS_HEADER_H, SIDEBAR_W, SettingsApp, WIDGETS_PAGE_INDEX, animate_towards};
 use crate::utils::color::SettingsTheme;
+use crate::utils::settings_ui::input::{WIDGET_LIBRARY_TILE_H, widget_source_rect};
 use crate::utils::settings_ui::items::{
     CONTENT_PADDING, GROUP_INNER_PAD, GROUP_RADIUS, ROW_HEIGHT, SettingsItem,
 };
+use crate::utils::settings_ui::renderer::{draw_delete_button, draw_library_tile_surface};
 use crate::utils::settings_ui::{WidgetEditorMode, settings_color};
 
 const SLIDE_RATE: f32 = 16.0;
@@ -28,6 +30,7 @@ enum ArrowDirection {
 pub(crate) struct PageOrderDrag {
     kind: ExpandedPageKind,
     grab_offset: f32,
+    library_width: Option<f32>,
 }
 
 pub(crate) struct PageOrderState {
@@ -36,6 +39,8 @@ pub(crate) struct PageOrderState {
     drag: Option<PageOrderDrag>,
     lift: f32,
     press: Option<(ExpandedPageKind, ArrowDirection, Instant)>,
+    original_order: Option<Vec<ExpandedPageKind>>,
+    list_height: f32,
 }
 
 impl Default for PageOrderState {
@@ -46,6 +51,8 @@ impl Default for PageOrderState {
             drag: None,
             lift: 0.0,
             press: None,
+            original_order: None,
+            list_height: 0.0,
         }
     }
 }
@@ -67,10 +74,27 @@ pub(crate) fn page_name_key(kind: ExpandedPageKind) -> &'static str {
 }
 
 pub(crate) fn page_order_list_height(count: usize) -> f32 {
-    count as f32 * ROW_HEIGHT
+    count.max(1) as f32 * ROW_HEIGHT
+}
+
+pub(crate) fn page_library_height(count: usize, width: f32) -> f32 {
+    if count == 0 {
+        return ROW_HEIGHT + GROUP_INNER_PAD * 2.0;
+    }
+    let panel_width = width - CONTENT_PADDING * 2.0 - GROUP_INNER_PAD * 2.0;
+    let (_, y, _, height) = widget_source_rect(0.0, panel_width, 0.0, count - 1);
+    y + height + GROUP_INNER_PAD * 2.0
 }
 
 impl SettingsApp {
+    pub(crate) fn page_order_display_height(&self) -> f32 {
+        if self.page_order.initialized {
+            self.page_order.list_height
+        } else {
+            page_order_list_height(self.config.expanded_page_order.len())
+        }
+    }
+
     fn page_order_active(&self) -> bool {
         self.active_page == WIDGETS_PAGE_INDEX
             && self.widget_editor_mode == WidgetEditorMode::Pages
@@ -78,18 +102,30 @@ impl SettingsApp {
     }
 
     fn page_order_list_rect(&self) -> Option<Rect> {
+        self.page_order_custom_rect(0)
+    }
+
+    fn page_order_library_rect(&self) -> Option<Rect> {
+        self.page_order_custom_rect(1)
+    }
+
+    fn page_order_custom_rect(&self, index: usize) -> Option<Rect> {
         if !self.page_order_active() {
             return None;
         }
         let mut y = SETTINGS_HEADER_H;
+        let mut custom = 0;
         for item in &self.cached_items {
             if let SettingsItem::Custom { height } = item {
-                return Some(Rect::from_xywh(
-                    SIDEBAR_W + CONTENT_PADDING,
-                    y - self.scroll_y,
-                    self.content_width() - CONTENT_PADDING * 2.0,
-                    *height,
-                ));
+                if custom == index {
+                    return Some(Rect::from_xywh(
+                        SIDEBAR_W + CONTENT_PADDING,
+                        y - self.scroll_y,
+                        self.content_width() - CONTENT_PADDING * 2.0,
+                        *height,
+                    ));
+                }
+                custom += 1;
             }
             y += item.height();
         }
@@ -98,12 +134,51 @@ impl SettingsApp {
 
     fn page_order_arrow_rect(list: Rect, row: usize, direction: ArrowDirection) -> Rect {
         let top = list.top + row as f32 * ROW_HEIGHT + (ROW_HEIGHT - ARROW_BUTTON) / 2.0;
-        let right = list.right - GROUP_INNER_PAD;
+        let right = list.right - GROUP_INNER_PAD - ARROW_BUTTON - ARROW_GAP;
         let left = match direction {
             ArrowDirection::Down => right - ARROW_BUTTON,
             ArrowDirection::Up => right - ARROW_BUTTON * 2.0 - ARROW_GAP,
         };
         Rect::from_xywh(left, top, ARROW_BUTTON, ARROW_BUTTON)
+    }
+
+    fn page_order_remove_rect(list: Rect, top: f32) -> Rect {
+        Rect::from_xywh(
+            list.right - GROUP_INNER_PAD - ARROW_BUTTON,
+            top + (ROW_HEIGHT - ARROW_BUTTON) / 2.0,
+            ARROW_BUTTON,
+            ARROW_BUTTON,
+        )
+    }
+
+    fn page_order_row_top(&self, list: Rect, slot: usize, kind: ExpandedPageKind) -> f32 {
+        let position = if self.page_order.initialized {
+            self.page_order.slots[kind_index(kind)]
+        } else {
+            slot as f32
+        };
+        list.top + position * ROW_HEIGHT
+    }
+
+    fn page_order_library_tiles(&self) -> Vec<(ExpandedPageKind, Rect)> {
+        let Some(panel) = self.page_order_library_rect() else {
+            return Vec::new();
+        };
+        ExpandedPageKind::ALL
+            .into_iter()
+            .filter(|kind| !self.config.expanded_page_order.contains(kind))
+            .filter(|kind| self.page_order.drag.is_none_or(|drag| drag.kind != *kind))
+            .enumerate()
+            .map(|(index, kind)| {
+                let (x, y, width, height) = widget_source_rect(
+                    panel.left + GROUP_INNER_PAD,
+                    panel.width() - GROUP_INNER_PAD * 2.0,
+                    panel.top + GROUP_INNER_PAD,
+                    index,
+                );
+                (kind, Rect::from_xywh(x, y, width, height))
+            })
+            .collect()
     }
 
     fn page_order_row_at(&mut self, x: f32, y: f32) -> Option<(Rect, usize)> {
@@ -116,12 +191,31 @@ impl SettingsApp {
         if !list.contains(point) || y < SETTINGS_HEADER_H {
             return None;
         }
-        let row = ((y - list.top) / ROW_HEIGHT).floor() as usize;
-        (row < self.config.expanded_page_order.len()).then_some((list, row))
+        self.config
+            .expanded_page_order
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(slot, kind)| {
+                Rect::from_xywh(
+                    list.left,
+                    self.page_order_row_top(list, *slot, **kind),
+                    list.width(),
+                    ROW_HEIGHT,
+                )
+                .contains(point)
+            })
+            .map(|(row, _)| (list, row))
     }
 
     pub(crate) fn page_order_hovered(&mut self, x: f32, y: f32) -> bool {
-        self.page_order_row_at(x, y).is_some()
+        self.page_order_active()
+            && (self.page_order.drag.is_some()
+                || self.page_order_row_at(x, y).is_some()
+                || self
+                    .page_order_library_tiles()
+                    .iter()
+                    .any(|(_, rect)| y >= SETTINGS_HEADER_H && rect.contains(Point::new(x, y))))
     }
 
     fn move_page(&mut self, from: usize, to: usize) {
@@ -136,12 +230,39 @@ impl SettingsApp {
     pub(crate) fn handle_page_order_press(&mut self) -> bool {
         let (x, y) = self.logical_mouse_pos;
         let Some((list, row)) = self.page_order_row_at(x, y) else {
-            return false;
+            if !self.page_order_active() || y < SETTINGS_HEADER_H {
+                return false;
+            }
+            self.ensure_items_cache();
+            let Some((kind, rect)) = self
+                .page_order_library_tiles()
+                .into_iter()
+                .find(|(_, rect)| rect.contains(Point::new(x, y)))
+            else {
+                return false;
+            };
+            self.page_order.original_order = Some(self.config.expanded_page_order.clone());
+            self.page_order.drag = Some(PageOrderDrag {
+                kind,
+                grab_offset: ROW_HEIGHT / 2.0,
+                library_width: Some(rect.width()),
+            });
+            self.request_redraw();
+            return true;
         };
         let count = self.config.expanded_page_order.len();
         let kind = self.config.expanded_page_order[row];
+        let row_top = self.page_order_row_top(list, row, kind);
+        if Self::page_order_remove_rect(list, row_top).contains(Point::new(x, y)) {
+            self.config.expanded_page_order.remove(row);
+            self.page_order.press = None;
+            self.persist_settings_change();
+            return true;
+        }
         for direction in [ArrowDirection::Up, ArrowDirection::Down] {
-            if !Self::page_order_arrow_rect(list, row, direction).contains(Point::new(x, y)) {
+            let button = Self::page_order_arrow_rect(list, 0, direction)
+                .offset(winisland_render::Vec2::new(0.0, row_top - list.top));
+            if !button.contains(Point::new(x, y)) {
                 continue;
             }
             let target = match direction {
@@ -155,10 +276,11 @@ impl SettingsApp {
             }
             return true;
         }
-        let row_top = list.top + row as f32 * ROW_HEIGHT;
+        self.page_order.original_order = Some(self.config.expanded_page_order.clone());
         self.page_order.drag = Some(PageOrderDrag {
             kind,
             grab_offset: y - row_top,
+            library_width: None,
         });
         self.request_redraw();
         true
@@ -173,28 +295,80 @@ impl SettingsApp {
             return false;
         };
         let count = self.config.expanded_page_order.len();
+        let pointer = Point::new(self.logical_mouse_pos.0, self.logical_mouse_pos.1);
+        let inside = pointer.y >= SETTINGS_HEADER_H && list.contains(pointer);
+        if !inside {
+            if drag.library_width.is_some() && self.config.expanded_page_order.contains(&drag.kind)
+            {
+                self.config
+                    .expanded_page_order
+                    .retain(|kind| *kind != drag.kind);
+                self.mark_items_dirty();
+            }
+            return true;
+        }
         let pointer_slot = (self.logical_mouse_pos.1 - drag.grab_offset - list.top) / ROW_HEIGHT;
-        let target = pointer_slot
-            .round()
-            .clamp(0.0, count.saturating_sub(1) as f32) as usize;
-        if let Some(current) = self
+        let current = self
             .config
             .expanded_page_order
             .iter()
-            .position(|kind| *kind == drag.kind)
-            && current != target
-        {
-            self.move_page(current, target);
+            .position(|kind| *kind == drag.kind);
+        let maximum = if current.is_some() {
+            count.saturating_sub(1)
+        } else {
+            count
+        };
+        let target = pointer_slot.round().clamp(0.0, maximum as f32) as usize;
+        if let Some(current) = current {
+            if current != target {
+                self.move_page(current, target);
+                self.mark_items_dirty();
+            }
+        } else {
+            self.config.expanded_page_order.insert(target, drag.kind);
+            self.page_order.slots[kind_index(drag.kind)] = target as f32;
             self.mark_items_dirty();
         }
         true
     }
 
     pub(crate) fn handle_page_order_release(&mut self) -> bool {
+        if self.page_order.drag.is_none() {
+            return false;
+        }
+        self.update_page_order_drag();
+        self.ensure_items_cache();
+        let pointer = Point::new(self.logical_mouse_pos.0, self.logical_mouse_pos.1);
+        let inside = pointer.y >= SETTINGS_HEADER_H
+            && self
+                .page_order_list_rect()
+                .is_some_and(|list| list.contains(pointer));
+        if !inside {
+            return self.cancel_page_order_drag();
+        }
+        self.page_order.drag = None;
+        let changed = self
+            .page_order
+            .original_order
+            .take()
+            .is_some_and(|original| original != self.config.expanded_page_order);
+        if changed {
+            self.persist_settings_change();
+        } else {
+            self.mark_items_dirty();
+        }
+        true
+    }
+
+    pub(crate) fn cancel_page_order_drag(&mut self) -> bool {
         if self.page_order.drag.take().is_none() {
             return false;
         }
-        self.persist_settings_change();
+        if let Some(original) = self.page_order.original_order.take() {
+            self.config.expanded_page_order = original;
+        }
+        self.mark_items_dirty();
+        self.request_redraw();
         true
     }
 
@@ -205,6 +379,9 @@ impl SettingsApp {
         let state = &self.page_order;
         let lift_target = f32::from(state.drag.is_some());
         (state.lift - lift_target).abs() > 0.001
+            || (state.list_height - page_order_list_height(self.config.expanded_page_order.len()))
+                .abs()
+                > 0.001
             || state.drag.is_some()
             || state
                 .press
@@ -226,6 +403,14 @@ impl SettingsApp {
         let dragged = self.page_order.drag.map(|drag| drag.kind);
         let state = &mut self.page_order;
         let mut changed = false;
+        let target_height = page_order_list_height(order.len());
+        let layout_changed = if state.initialized {
+            animate_towards(&mut state.list_height, target_height, SLIDE_RATE, dt)
+        } else {
+            state.list_height = target_height;
+            true
+        };
+        changed |= layout_changed;
         for (slot, kind) in order.iter().enumerate() {
             let value = &mut state.slots[kind_index(*kind)];
             if !state.initialized {
@@ -244,7 +429,11 @@ impl SettingsApp {
             state.press = None;
             changed = true;
         }
-        changed || state.press.is_some()
+        let animating = changed || state.press.is_some();
+        if layout_changed {
+            self.mark_items_dirty();
+        }
+        animating
     }
 
     pub(crate) fn draw_page_order_list(&self, painter: Painter<'_>, theme: &SettingsTheme) {
@@ -292,19 +481,37 @@ impl SettingsApp {
 
         let dragged = self.page_order.drag;
         let pointer = Point::new(self.logical_mouse_pos.0, self.logical_mouse_pos.1);
+        self.draw_page_order_library(painter, theme, pointer);
+        if order.is_empty() {
+            Self::draw_page_order_label(painter, list, &tr("page_order_empty"), theme);
+        }
         let mut rows: Vec<(usize, ExpandedPageKind, f32)> = order
             .iter()
             .enumerate()
             .map(|(slot, kind)| {
                 let top = match dragged {
-                    Some(drag) if drag.kind == *kind => {
-                        (pointer.y - drag.grab_offset).clamp(list.top, list.bottom - ROW_HEIGHT)
-                    }
+                    Some(drag) if drag.kind == *kind => pointer.y - drag.grab_offset,
                     _ => list.top + self.page_order.slots[kind_index(*kind)] * ROW_HEIGHT,
                 };
                 (slot, *kind, top)
             })
             .collect();
+        if let Some(drag) = dragged
+            && !order.contains(&drag.kind)
+        {
+            if let Some(width) = drag.library_width {
+                let tile = Rect::from_xywh(
+                    pointer.x - width / 2.0,
+                    pointer.y - WIDGET_LIBRARY_TILE_H / 2.0,
+                    width,
+                    WIDGET_LIBRARY_TILE_H,
+                );
+                draw_library_tile_surface(painter, tile, self.page_order.lift, theme);
+                Self::draw_page_order_label(painter, tile, &tr(page_name_key(drag.kind)), theme);
+            } else {
+                rows.push((count, drag.kind, pointer.y - drag.grab_offset));
+            }
+        }
         rows.sort_by_key(|(_, kind, _)| dragged.is_some_and(|drag| drag.kind == *kind));
 
         for (slot, kind, top) in rows {
@@ -362,7 +569,11 @@ impl SettingsApp {
                 false,
                 settings_color(theme.text_pri),
             );
-            let position = (slot + 1).to_string();
+            let position = if slot < count {
+                (slot + 1).to_string()
+            } else {
+                String::new()
+            };
             fonts.draw_str(
                 painter,
                 &position,
@@ -373,6 +584,16 @@ impl SettingsApp {
             );
 
             let visual_row = (top - list.top) / ROW_HEIGHT;
+            if is_dragged {
+                continue;
+            }
+            let remove = Self::page_order_remove_rect(list, top);
+            draw_delete_button(
+                painter,
+                remove.center_x(),
+                remove.center_y(),
+                if remove.contains(pointer) { 1.12 } else { 1.0 },
+            );
             for direction in [ArrowDirection::Up, ArrowDirection::Down] {
                 let mut button = Self::page_order_arrow_rect(list, 0, direction);
                 button = button.offset(winisland_render::Vec2::new(0.0, visual_row * ROW_HEIGHT));
@@ -424,5 +645,47 @@ impl SettingsApp {
             }
         }
         painter.restore_to(save_count);
+    }
+
+    fn draw_page_order_label(painter: Painter<'_>, rect: Rect, text: &str, theme: &SettingsTheme) {
+        let fonts = FontManager::global();
+        let bounds = fonts.measure_str(text, 13.0, false);
+        fonts.draw_str(
+            painter,
+            text,
+            Point::new(
+                rect.center_x() - bounds.width() / 2.0 - bounds.left,
+                rect.center_y() - bounds.height() / 2.0 - bounds.top,
+            ),
+            13.0,
+            false,
+            settings_color(theme.text_sec),
+        );
+    }
+
+    fn draw_page_order_library(&self, painter: Painter<'_>, theme: &SettingsTheme, pointer: Point) {
+        let Some(panel) = self.page_order_library_rect() else {
+            return;
+        };
+        painter.fill_round_rect(
+            panel,
+            Radius::uniform(GROUP_RADIUS),
+            settings_color(theme.group_bg),
+        );
+        painter.stroke_round_rect(
+            panel.inset(0.375),
+            Radius::uniform(GROUP_RADIUS),
+            0.75,
+            settings_color(theme.group_border),
+        );
+        let tiles = self.page_order_library_tiles();
+        if tiles.is_empty() && self.page_order.drag.is_none() {
+            Self::draw_page_order_label(painter, panel, &tr("page_library_empty"), theme);
+        }
+        for (kind, rect) in tiles {
+            let hover = f32::from(self.page_order.drag.is_none() && rect.contains(pointer));
+            draw_library_tile_surface(painter, rect, hover, theme);
+            Self::draw_page_order_label(painter, rect, &tr(page_name_key(kind)), theme);
+        }
     }
 }

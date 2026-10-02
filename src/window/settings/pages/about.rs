@@ -4,7 +4,7 @@ use winisland_render::Image;
 
 use crate::utils::settings_ui::ClickResult;
 use crate::utils::settings_ui::items::SettingsItem;
-use winisland_core::config::{APP_AUTHOR, APP_HOMEPAGE, APP_VERSION};
+use winisland_core::config::{APP_HOMEPAGE, APP_VERSION};
 use winisland_core::i18n::tr;
 
 use super::super::SettingsApp;
@@ -40,11 +40,6 @@ impl SettingsApp {
         page.center_image(app_icon(), ABOUT_ICON_SIZE, ABOUT_ICON_HEIGHT);
         page.center_text("WinIsland".to_string(), 28.0, theme.text_pri);
         page.center_text(format!("Version {APP_VERSION}"), 14.0, theme.text_sec);
-        page.center_text(
-            format!("{} {APP_AUTHOR}", tr("created_by")),
-            14.0,
-            theme.text_sec,
-        );
         page.spacer(10.0);
         page.center_link(tr("visit_homepage"), theme.accent, AboutAction::Homepage);
         page
