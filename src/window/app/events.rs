@@ -244,7 +244,16 @@ impl App {
                             };
                         let v2_widgets_changed = self.refresh_v2_widgets();
                         self.prepare_v2_frames();
-                        self.refresh_v2_contexts();
+                        self.refresh_v2_activities();
+                        let media_state = if let Some(source) = self.plugin_media_source.as_ref() {
+                            (!source.info.title.is_empty(), source.info.is_playing)
+                        } else {
+                            (
+                                self.config.smtc_enabled && !self.smtc_media_info.title.is_empty(),
+                                self.smtc_media_info.is_playing,
+                            )
+                        };
+                        self.update_local_activities(media_state.0, media_state.1);
                         let media_info = if let Some(source) = self.plugin_media_source.as_ref() {
                             &source.info
                         } else if self.config.smtc_enabled {
@@ -274,9 +283,7 @@ impl App {
                             media_info.is_playing,
                         );
                         self.audio.set_gate_override(music_active && !is_hidden);
-                        self.ctx_mgr
-                            .set_smtc_state(music_active, music_active && media_info.is_playing);
-                        let _ = self.ctx_mgr.tick();
+                        let _ = self.activity_mgr.tick();
                         if v2_widgets_changed {
                             let widgets = self.widget_mgr.configurable_widgets();
                             let mut layout_config = crate::core::persistence::load_config();
@@ -297,7 +304,7 @@ impl App {
                         let mini_content = if compact_components_hidden {
                             None
                         } else {
-                            self.ctx_mgr.current_mini()
+                            Self::mini_content_for(&self.activity_mgr, self.timer_content)
                         };
                         let attention_alpha = if self.fullscreen_hide_active()
                             && self.hide.fullscreen

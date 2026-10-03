@@ -43,8 +43,9 @@ pub struct SystemServices {
 }
 
 pub(crate) struct ServiceState {
+    pub activities: HashMap<u64, ActivityRecord>,
     pub contexts: HashMap<u64, ContextRecord>,
-    pub context_revision: u64,
+    pub activity_revision: u64,
     pub media: HashMap<u64, MediaRecord>,
     pub media_revision: u64,
     pub selected_media: Option<u64>,
@@ -62,6 +63,11 @@ pub(crate) struct ServiceState {
 
 pub(crate) struct ContextRecord {
     pub data: ContextDataV2,
+    pub updated_at: Instant,
+}
+
+pub(crate) struct ActivityRecord {
+    pub spec: winisland_plugin_api::ActivitySpecV2,
     pub updated_at: Instant,
 }
 
@@ -146,8 +152,9 @@ impl HostRuntime {
             resources: ResourceTable::new(),
             tables: AbiTables::new(host_build),
             state: Mutex::new(ServiceState {
+                activities: HashMap::new(),
                 contexts: HashMap::new(),
-                context_revision: 0,
+                activity_revision: 0,
                 media: HashMap::new(),
                 media_revision: 0,
                 selected_media: None,
@@ -318,6 +325,7 @@ impl HostRuntime {
                 if disabled {
                     record.disabled = true;
                     state.disabled_widgets.push(widget);
+                    state.activity_revision = state.activity_revision.wrapping_add(1);
                 }
                 Err(WidgetFrameError {
                     reason,
@@ -371,9 +379,13 @@ impl HostRuntime {
         for (id, kind) in &revoked {
             match kind {
                 ResourceKind::Event | ResourceKind::Command => {}
+                ResourceKind::Activity => {
+                    state.activities.remove(id);
+                    state.activity_revision = state.activity_revision.wrapping_add(1);
+                }
                 ResourceKind::Context => {
                     if state.contexts.remove(id).is_some() {
-                        state.context_revision = state.context_revision.wrapping_add(1);
+                        state.activity_revision = state.activity_revision.wrapping_add(1);
                     }
                 }
                 ResourceKind::Media => {
@@ -390,6 +402,7 @@ impl HostRuntime {
                 }
                 ResourceKind::Widget => {
                     state.widgets.remove(id);
+                    state.activity_revision = state.activity_revision.wrapping_add(1);
                     self.extensions.remove_target(*id);
                 }
                 ResourceKind::Lyrics => {

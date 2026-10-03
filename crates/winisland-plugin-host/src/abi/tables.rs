@@ -1,7 +1,7 @@
 use crate::services::extensions;
 use std::ffi::c_void;
 use winisland_plugin_api::{
-    CommandApiV2, EventsApiV2, InputApiV2, MediaSessionApiV2, SurfaceApiV2,
+    ActivityApiV2, CommandApiV2, EventsApiV2, InputApiV2, MediaSessionApiV2, SurfaceApiV2,
 };
 
 use winisland_plugin_api::abi::{
@@ -12,10 +12,12 @@ use winisland_plugin_api::abi::{
 
 use crate::runtime::HostRuntime;
 use crate::services::{
-    context, host_state, i18n, image, log, lyrics, media, settings, store, system, text, widget,
+    activity, context, host_state, i18n, image, log, lyrics, media, settings, store, system, text,
+    widget,
 };
 
 pub(crate) struct AbiTables {
+    activity: ActivityApiV2,
     pub host: PluginHostV2,
     context: ContextApiV2,
     media: MediaApiV2,
@@ -47,6 +49,12 @@ fn prefix<T>(version: u32) -> TablePrefix {
 impl AbiTables {
     pub fn new(host_build: u32) -> Self {
         Self {
+            activity: ActivityApiV2 {
+                prefix: prefix::<ActivityApiV2>(abi::IFACE_VERSION_1),
+                create: Some(activity::create),
+                update: Some(activity::update),
+                release: Some(activity::release),
+            },
             system: SystemApiV2 {
                 prefix: prefix::<SystemApiV2>(abi::IFACE_VERSION_1),
                 local_datetime: Some(system::local_datetime),
@@ -163,6 +171,7 @@ impl AbiTables {
     }
 
     pub fn bind(&mut self, context: *mut c_void) {
+        self.activity.prefix.context = context;
         self.system.prefix.context = context;
         self.input.prefix.context = context;
         self.command.prefix.context = context;
@@ -196,6 +205,7 @@ unsafe extern "C" fn query(
     let runtime = unsafe { &*context.cast::<HostRuntime>() };
     let tables = &runtime.tables;
     match interface {
+        abi::IFACE_ACTIVITY => (&tables.activity as *const ActivityApiV2).cast(),
         abi::IFACE_SYSTEM => (&tables.system as *const SystemApiV2).cast(),
         abi::IFACE_INPUT => (&tables.input as *const InputApiV2).cast(),
         abi::IFACE_COMMAND => (&tables.command as *const CommandApiV2).cast(),

@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Priority {
@@ -7,46 +7,36 @@ pub enum Priority {
     High = 2,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TimerContent {
-    pub remaining: Duration,
-    pub total: Duration,
-    pub paused: bool,
-}
-
-impl TimerContent {
-    pub fn remaining_secs(self) -> u64 {
-        self.remaining.as_secs() + u64::from(self.remaining.subsec_nanos() > 0)
-    }
-
-    pub fn progress(self) -> f32 {
-        if self.total.is_zero() {
-            return 1.0;
-        }
-        (1.0 - self.remaining.as_secs_f32() / self.total.as_secs_f32()).clamp(0.0, 1.0)
-    }
-
-    pub fn time_text(self) -> String {
-        let remaining = self.remaining_secs();
-        let hours = remaining / 3600;
-        let minutes = remaining % 3600 / 60;
-        let seconds = remaining % 60;
-        if hours > 0 {
-            format!("{hours}:{minutes:02}:{seconds:02}")
-        } else {
-            format!("{minutes}:{seconds:02}")
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct PluginContext {
-    pub id: u64,
-    pub priority: Priority,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActivityText {
     pub title: String,
     pub body: String,
     pub compact_text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActivityContent {
+    Local,
+    Text(ActivityText),
+    Surface(u64),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Activity {
+    pub id: u64,
+    pub priority: Priority,
+    pub content: ActivityContent,
     pub show_compact: bool,
+    pub keep_visible: bool,
+    pub preferred_width: f32,
+    pub preferred_height: f32,
+    pub page: Option<u64>,
     pub expires_at: Option<Instant>,
     pub updated_at: Instant,
+}
+
+impl Activity {
+    pub fn visible_at(&self, now: Instant) -> bool {
+        self.show_compact && self.expires_at.is_none_or(|deadline| deadline > now)
+    }
 }

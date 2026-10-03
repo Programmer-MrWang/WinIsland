@@ -2,9 +2,12 @@ use crate::core::smtc::MediaInfo;
 use crate::ui::expanded::music_view::{
     DrawVisualizerParams, draw_text_cached, draw_visualizer, get_cached_media_image,
 };
+use std::collections::HashMap;
 use winisland_core::config::LyricTransitionAnimation;
-use winisland_core::context::MiniContent;
+use winisland_core::context::ActivityText;
 use winisland_core::lyrics::LyricHighlight;
+use winisland_plugin_host::draw::replay::PreparedFrame;
+use winisland_plugin_host::host::PluginHost;
 use winisland_render::text::{DrawTextCachedParams, FontManager};
 use winisland_render::{BlurSpec, Image, ImageOptions, Painter, Radius, Rect, Rgba, Sampling};
 
@@ -53,7 +56,17 @@ pub(crate) fn lyric_pair_height(font_size: f32, global_scale: f32) -> f32 {
     primary_size * (1.0 + SECONDARY_LYRIC_SCALE + LYRIC_PAIR_GAP_SCALE) + 8.0 * global_scale
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum MiniContent<'a> {
+    Music,
+    Timer(crate::ui::compact::timer::TimerContent),
+    Text(&'a ActivityText),
+    Surface(u64),
+}
+
 pub(super) struct MiniContentParams<'a> {
+    pub(super) plugin_host: Option<&'a PluginHost>,
+    pub(super) plugin_frames: &'a HashMap<u64, PreparedFrame>,
     pub(super) painter: Painter<'a>,
     pub(super) content: Option<MiniContent<'a>>,
     pub(super) mini_alpha: f32,
@@ -103,7 +116,33 @@ pub(super) fn draw_mini_content(params: MiniContentParams<'_>) {
             params.global_scale,
             params.mini_alpha,
         ),
-        MiniContent::Plugin(context) => draw_plugin_content(&params, context, alpha),
+        MiniContent::Text(context) => draw_plugin_content(&params, context, alpha),
+        MiniContent::Surface(id) => {
+            if let Some(host) = params.plugin_host {
+                let rect = Rect::from_xywh(
+                    params.offset_x,
+                    params.stable_offset_y,
+                    params.current_w,
+                    params.base_h,
+                );
+                crate::ui::plugin::draw(
+                    params.painter,
+                    host,
+                    params.plugin_frames,
+                    crate::ui::plugin::SurfaceFrame {
+                        id,
+                        rect,
+                        logical: [
+                            rect.width() / params.global_scale,
+                            rect.height() / params.global_scale,
+                        ],
+                        input_offset: 0.0,
+                        alpha,
+                        interactive: alpha > 240 && params.expansion_progress < 0.01,
+                    },
+                );
+            }
+        }
     }
 }
 
@@ -323,11 +362,7 @@ fn plugin_text_x(text: &str, size: f32, bold: bool, text_x: f32, text_width: f32
     text_x + ((text_width - measured) * 0.5).max(0.0)
 }
 
-fn draw_plugin_content(
-    params: &MiniContentParams<'_>,
-    context: &winisland_core::context::PluginContext,
-    alpha: u8,
-) {
+fn draw_plugin_content(params: &MiniContentParams<'_>, context: &ActivityText, alpha: u8) {
     let font_size = if params.font_size > 0.0 {
         params.font_size * PLUGIN_FONT_SCALE * params.global_scale
     } else {

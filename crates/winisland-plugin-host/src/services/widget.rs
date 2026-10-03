@@ -134,6 +134,7 @@ pub unsafe extern "C" fn release(
         return status;
     }
     state.widgets.remove(&id.get());
+    state.activity_revision = state.activity_revision.wrapping_add(1);
     drop(state);
     host.extensions.remove_target(id.get());
     PluginStatus::Ok

@@ -52,7 +52,9 @@ pub unsafe extern "C" fn create(
             updated_at: Instant::now(),
         },
     );
-    state.context_revision = state.context_revision.wrapping_add(1);
+    state.activity_revision = state.activity_revision.wrapping_add(1);
+    drop(state);
+    host.extensions.changed();
     // SAFETY: The caller supplied a writable ResourceId output pointer.
     unsafe { *out = ResourceId::from_raw(id) };
     PluginStatus::Ok
@@ -91,7 +93,9 @@ pub unsafe extern "C" fn update(
     };
     record.data = data;
     record.updated_at = Instant::now();
-    state.context_revision = state.context_revision.wrapping_add(1);
+    state.activity_revision = state.activity_revision.wrapping_add(1);
+    drop(state);
+    host.extensions.changed();
     PluginStatus::Ok
 }
 
@@ -118,6 +122,8 @@ pub unsafe extern "C" fn release(
         return status;
     }
     state.contexts.remove(&id.get());
-    state.context_revision = state.context_revision.wrapping_add(1);
+    state.activity_revision = state.activity_revision.wrapping_add(1);
+    drop(state);
+    host.extensions.changed();
     PluginStatus::Ok
 }

@@ -13,10 +13,11 @@ impl App {
     pub(super) fn required_window_size(&self) -> WindowSize {
         let compact_scale = self.config.compact_scale;
         let expanded_scale = self.config.expanded_scale;
+        let activity_size = self.activity_mgr.preferred_size();
         let compact_width = crate::ui::widget::compact::target_width(
             &self.config.compact_widget_layout,
             self.config.base_width,
-            Some(MAX_LYRIC_WIDTH),
+            Some(MAX_LYRIC_WIDTH.max(activity_size.0)),
         ) * compact_scale;
         let plugin_widths = crate::ui::plugin::compact_widths(self.plugin_host.as_deref());
         let compact_width = compact_width + (plugin_widths.0 + plugin_widths.1) * compact_scale;
@@ -25,7 +26,7 @@ impl App {
             self.config.base_height,
             compact_scale,
         );
-        let compact_height = self.config.base_height * compact_scale;
+        let compact_height = self.config.base_height.max(activity_size.1) * compact_scale;
         let compact_lyric_height = if self.config.show_secondary_lyrics {
             compact_height.max(crate::ui::island::mini_lyric_pair_height(
                 self.config.font_size,
@@ -342,7 +343,14 @@ impl App {
 
     pub(super) fn compact_content_height(&self) -> f32 {
         let scale = self.config.compact_scale.max(f32::EPSILON);
-        let base_height = self.config.base_height * scale;
+        let activity_height = if self.components_hidden {
+            0.0
+        } else {
+            self.activity_mgr
+                .current()
+                .map_or(0.0, |item| item.preferred_height)
+        };
+        let base_height = self.config.base_height.max(activity_height) * scale;
         let has_secondary_lyric = !self.lyrics.current_secondary_text.is_empty()
             || (!self.lyrics.old_secondary_text.is_empty() && self.lyrics.transition < 1.0);
         if self.components_hidden
@@ -350,8 +358,8 @@ impl App {
             || !self.config.show_secondary_lyrics
             || !has_secondary_lyric
             || !matches!(
-                self.ctx_mgr.current_mini(),
-                Some(winisland_core::context::MiniContent::Music)
+                self.mini_content(),
+                Some(crate::ui::island::MiniContent::Music)
             )
         {
             return base_height;
@@ -406,20 +414,29 @@ impl App {
         dt: f32,
     ) -> f32 {
         let compact = !self.expanded;
-        let timer_width = match self.ctx_mgr.current_mini() {
-            Some(winisland_core::context::MiniContent::Timer(timer)) => Some(
-                crate::ui::compact::timer::countdown_width(timer, self.config.base_width),
-            ),
-            _ => None,
-        };
+        let activity_width = self
+            .activity_mgr
+            .current()
+            .map(|item| item.preferred_width)
+            .filter(|width| *width > 0.0);
         let target_base_w = if compact
             && !self.components_hidden
             && !self.is_width_hiding()
-            && timer_width.is_some()
+            && activity_width.is_some()
         {
             self.lyrics.scroll_offset = 0.0;
-            timer_width.unwrap_or(self.config.base_width)
-        } else if music_active && compact && !self.is_width_hiding() {
+            activity_width
+                .unwrap_or(self.config.base_width)
+                .max(self.config.base_width)
+        } else if music_active
+            && matches!(
+                self.mini_content(),
+                Some(crate::ui::island::MiniContent::Music)
+            )
+            && !self.components_hidden
+            && compact
+            && !self.is_width_hiding()
+        {
             let has_visible_lyrics = self.config.show_lyrics
                 && (!self.lyrics.current_text.is_empty()
                     || (!self.lyrics.old_text.is_empty() && self.lyrics.transition < 1.0));

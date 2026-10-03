@@ -88,7 +88,9 @@ impl App {
         {
             settings.set_plugin_settings_pages(pages);
         }
-        if self.ctx_mgr.tick() {
+        let activities_changed = self.refresh_v2_activities();
+        if self.activity_mgr.tick() || activities_changed {
+            self.resize_activity_window();
             window.request_redraw();
         }
 
@@ -116,13 +118,11 @@ impl App {
         if self.compact_overlay.update_timer_finished() {
             window.request_redraw();
         }
-        let timer = crate::ui::expanded::timer_view::compact_content();
-        let context_changed = self.ctx_mgr.set_smtc_state(music_active, media_is_playing);
-        let timer_changed = self.ctx_mgr.set_timer(timer);
-        if timer.is_some() && self.compact_overlay.is_timer_finished_visible() {
+        let activities_changed = self.update_local_activities(music_active, media_is_playing);
+        if self.timer_content.is_some() && self.compact_overlay.is_timer_finished_visible() {
             self.compact_overlay.clear_timer_finished();
         }
-        if context_changed || timer_changed {
+        if activities_changed {
             window.request_redraw();
         }
 
@@ -202,8 +202,6 @@ impl App {
         let compact_overlay_visible = self.update_compact_and_auto_hide(
             &window,
             is_hovering_visible || plugin_input.captured || plugin_input.keyboard,
-            music_active,
-            media_is_playing,
         );
 
         if self.compact_overlay.is_volume_dragging() {
@@ -576,10 +574,7 @@ impl App {
         &mut self,
         window: &WindowRef,
         is_hovering_visible: bool,
-        music_active: bool,
-        media_is_playing: bool,
     ) -> bool {
-        let is_paused_idle = music_active && !media_is_playing;
         let overlay_present = !self.expanded && !self.is_hidden();
         let fullscreen_hidden = self.fullscreen_hide_active();
         let volume_state = if overlay_present && (!fullscreen_hidden || self.hide.overlay_reveal) {
@@ -658,8 +653,7 @@ impl App {
             && !self.expanded
             && !self.is_dragging
             && !compact_overlay_visible
-            && (self.components_hidden || !self.ctx_mgr.timer_active())
-            && (self.components_hidden || !music_active || is_paused_idle);
+            && (self.components_hidden || !self.activity_mgr.keeps_visible());
         if !self.config.auto_hide {
             let was_auto_hidden = self.hide.auto;
             self.hide.auto = false;
@@ -667,7 +661,7 @@ impl App {
             if was_auto_hidden && !self.is_hidden() {
                 self.springs.hide.velocity = -0.65;
             }
-        } else if (media_is_playing || self.ctx_mgr.timer_active())
+        } else if self.activity_mgr.keeps_visible()
             && !self.components_hidden
             && self.hide.auto
             && !self.hide.manual
@@ -677,7 +671,7 @@ impl App {
             if !self.is_hidden() {
                 self.springs.hide.velocity = -0.65;
             }
-            log::info!("Island un-hidden (media playing)");
+            log::info!("Island un-hidden (active activity)");
         } else if !self.is_hidden() && is_idle {
             if self.idle_timer.elapsed().as_secs_f32() > self.config.auto_hide_delay
                 && self.prepare_hide(window)
@@ -904,7 +898,7 @@ impl App {
             && preserve_compact_widget_width
         {
             let scale = self.config.compact_scale.max(f32::EPSILON);
-            let has_mini_content = !self.components_hidden && self.ctx_mgr.current_mini().is_some();
+            let has_mini_content = !self.components_hidden && self.activity_mgr.current().is_some();
             let center_content_width = has_mini_content.then_some(lyric_target_w / scale);
             crate::ui::widget::compact::target_width(
                 if self.components_hidden {
@@ -1036,8 +1030,8 @@ impl App {
             && !self.components_hidden
             && !self.compact_overlay.is_visible()
         {
-            match self.ctx_mgr.current_mini() {
-                Some(winisland_core::context::MiniContent::Timer(timer)) => Some(timer),
+            match self.mini_content() {
+                Some(crate::ui::island::MiniContent::Timer(timer)) => Some(timer),
                 _ => None,
             }
         } else {

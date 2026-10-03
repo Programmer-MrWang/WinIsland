@@ -566,7 +566,7 @@ pub unsafe extern "C" fn execute_command(
 fn valid_surface(spec: &SurfaceSpecV2) -> Result<(), PluginStatus> {
     key(&spec.key)?;
     text(&spec.title)?;
-    if !(SURFACE_PAGE..=SURFACE_FOREGROUND).contains(&spec.kind)
+    if !(SURFACE_PAGE..=SURFACE_COMPACT_MAIN).contains(&spec.kind)
         || spec.flags & !SURFACE_ENABLED != 0
         || !spec.width.is_finite()
         || !spec.height.is_finite()
@@ -652,6 +652,7 @@ pub unsafe extern "C" fn update_surface(
         }
         record.surface = Some(spec);
         record.redraw = true;
+        state.activity_revision = state.activity_revision.wrapping_add(1);
         drop(state);
         host.extensions.changed();
         Ok(())

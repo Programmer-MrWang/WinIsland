@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use winisland_core::config::{AppConfig, LyricTransitionAnimation, LyricTransitionMode};
-use winisland_core::context::ContextManager;
+use winisland_core::context::ActivityManager;
 use winisland_core::lyrics::LyricHighlight;
 use winisland_core::multitask::Multitask;
 use winisland_core::physics::Spring;
@@ -25,6 +25,7 @@ use winisland_plugin_package::manifest::PluginManifest;
 use winisland_plugin_package::marketplace::MarketplaceCatalog;
 use winisland_render::Renderer;
 
+mod activities;
 mod events;
 mod frame;
 mod input;
@@ -130,14 +131,15 @@ pub struct App {
     touch_id: Option<u64>,
     touch_pos: WindowPoint,
     last_touch_at: Option<Instant>,
-    ctx_mgr: ContextManager,
+    activity_mgr: ActivityManager,
+    timer_content: Option<crate::ui::compact::timer::TimerContent>,
     widget_mgr: WidgetManager,
     plugin_mgr: PluginManager,
     plugin_host: Option<Rc<PluginHost>>,
     plugin_frames: HashMap<u64, PreparedFrame>,
     v2_widget_ids: HashSet<u64>,
-    v2_context_ids: HashSet<u64>,
-    v2_context_revision: u64,
+    v2_activity_ids: HashSet<u64>,
+    v2_activity_revision: u64,
     v2_media_revision: u64,
     v2_album_art_hash: Cell<Option<u64>>,
     v2_settings_revision: u64,
@@ -271,14 +273,15 @@ impl Default for App {
             touch_id: None,
             touch_pos: WindowPoint::new(0.0, 0.0),
             last_touch_at: None,
-            ctx_mgr: ContextManager::new(),
+            activity_mgr: ActivityManager::default(),
+            timer_content: None,
             widget_mgr: WidgetManager::new(),
             plugin_mgr,
             plugin_host,
             plugin_frames: HashMap::new(),
             v2_widget_ids: HashSet::new(),
-            v2_context_ids: HashSet::new(),
-            v2_context_revision: 0,
+            v2_activity_ids: HashSet::new(),
+            v2_activity_revision: u64::MAX,
             v2_media_revision: 0,
             v2_album_art_hash: Cell::new(None),
             v2_settings_revision: 0,

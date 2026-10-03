@@ -6,6 +6,7 @@ use winisland_plugin_api::types::v2::PluginToken;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ResourceKind {
+    Activity,
     Context,
     Media,
     I18n,
@@ -36,6 +37,7 @@ pub struct ResourceTable {
 
 fn limits(kind: ResourceKind) -> (usize, usize) {
     match kind {
+        ResourceKind::Activity => (64, usize::MAX),
         ResourceKind::Context => (64, usize::MAX),
         ResourceKind::Media => (4, 32 * 1024 * 1024),
         ResourceKind::I18n => (16, 4 * 1024 * 1024),

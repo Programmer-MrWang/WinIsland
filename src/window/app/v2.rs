@@ -20,29 +20,31 @@ impl App {
         self.v2_album_art_hash.set(Some(hash));
     }
 
-    pub(super) fn refresh_v2_contexts(&mut self) {
-        let Some((revision, contexts)) = self
+    pub(super) fn refresh_v2_activities(&mut self) -> bool {
+        let Some((revision, activities)) = self
             .plugin_host
             .as_ref()
-            .and_then(|host| host.contexts_snapshot())
+            .and_then(|host| host.activities_snapshot(self.v2_activity_revision))
         else {
-            return;
+            return false;
         };
-        if revision == self.v2_context_revision {
-            return;
-        }
-        let current_ids = contexts
+        let current_ids = activities
             .iter()
-            .map(|context| context.id)
+            .map(|activity| activity.id)
             .collect::<HashSet<_>>();
-        for id in self.v2_context_ids.difference(&current_ids) {
-            self.ctx_mgr.remove_context(*id);
+        let mut changed = false;
+        for id in self.v2_activity_ids.difference(&current_ids) {
+            changed |= self.activity_mgr.remove(*id);
         }
-        for context in contexts {
-            self.ctx_mgr.upsert_context(context);
+        for activity in activities {
+            changed |= self.activity_mgr.upsert(activity);
         }
-        self.v2_context_ids = current_ids;
-        self.v2_context_revision = revision;
+        self.v2_activity_ids = current_ids;
+        self.v2_activity_revision = revision;
+        if changed {
+            self.resize_activity_window();
+        }
+        changed
     }
 
     pub(super) fn next_v2_settings_pages(

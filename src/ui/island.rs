@@ -85,7 +85,7 @@ pub struct StyleParams<'a> {
     pub pages: &'a [ExpandedPage],
 }
 
-use winisland_core::context::MiniContent;
+pub(crate) use self::mini::MiniContent;
 
 const MIN_VISIBLE_OPACITY: f32 = 0.01;
 const MIN_BLUR_SIGMA: f32 = 0.1;
@@ -434,6 +434,8 @@ fn draw_compact_layer(
     let right_extension = (right_extension + plugin_right) * layout.compact_scale;
     draw_mini_content(MiniContentParams {
         painter,
+        plugin_host: style.plugin_host,
+        plugin_frames: style.plugin_frames,
         content: visible_mini_content,
         mini_alpha: alpha,
         current_w: (layout.current_w - left_extension - right_extension).max(0.0),

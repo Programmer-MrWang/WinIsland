@@ -513,12 +513,8 @@ impl App {
                     self.reveal_island();
                 } else {
                     self.expand();
-                    if matches!(
-                        self.ctx_mgr.current_mini(),
-                        Some(winisland_core::context::MiniContent::Timer(_))
-                    ) && self.expanded_pages().contains(&ExpandedPage::Timer)
-                    {
-                        self.current_page = ExpandedPage::Timer;
+                    if let Some(page) = self.activity_page() {
+                        self.current_page = page;
                         self.snap_to_current_page();
                     }
                 }

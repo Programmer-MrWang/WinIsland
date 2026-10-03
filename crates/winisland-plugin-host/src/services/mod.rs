@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod context;
 pub mod extensions;
 pub mod host_state;

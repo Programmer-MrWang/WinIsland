@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
+use crate::ui::compact::timer::TimerContent;
 use crate::ui::rolling_time::{RollingTime, TimeAnchor};
 use crate::ui::widget::expanded::{draw_widget_text_centered, widget_grid_layout};
-use winisland_core::context::TimerContent;
 use winisland_core::i18n::{tr, tr_args};
 use winisland_render::text::FontManager;
 use winisland_render::{Angle, Painter, Point, Radius, Rect, Rgba, StrokeCap};
