@@ -19,8 +19,15 @@ impl App {
                 crate::plugin::calendar::PAGE_KEY,
             )
         });
+        let visible_order: Vec<_> = self
+            .config
+            .expanded_page_order
+            .iter()
+            .copied()
+            .filter(|kind| !self.config.hidden_expanded_pages.contains(kind))
+            .collect();
         let mut pages = available_pages(
-            &self.config.expanded_page_order,
+            &visible_order,
             &PageAvailability {
                 music: self.music_page_available,
                 calendar,
@@ -186,6 +193,12 @@ impl App {
             }
         }
         true
+    }
+
+    pub(super) fn pager_hover_animating(&self) -> bool {
+        [&self.close_hover, &self.bar_hover]
+            .into_iter()
+            .any(|spring| spring.velocity != 0.0 || (spring.value != 0.0 && spring.value != 1.0))
     }
 
     pub(super) fn update_pager_hover(

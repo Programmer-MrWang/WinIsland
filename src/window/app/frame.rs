@@ -1038,6 +1038,7 @@ impl App {
             None
         };
         let transition_active = self.springs.any_animating()
+            || self.pager_hover_animating()
             || self.compact_overlay.is_timer_finished_animating()
             || (compact_timer.is_some() && crate::ui::compact::timer::countdown_is_animating())
             || self.multitask.is_animating()

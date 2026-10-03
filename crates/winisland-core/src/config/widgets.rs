@@ -18,15 +18,33 @@ pub fn default_expanded_page_order() -> Vec<ExpandedPageKind> {
     ExpandedPageKind::ALL.to_vec()
 }
 
-pub fn normalize_expanded_page_order(order: &mut Vec<ExpandedPageKind>) -> bool {
-    let mut normalized = Vec::with_capacity(ExpandedPageKind::ALL.len());
+pub fn normalize_expanded_pages(
+    order: &mut Vec<ExpandedPageKind>,
+    hidden: &mut Vec<ExpandedPageKind>,
+) -> bool {
+    let mut normalized_order = Vec::with_capacity(ExpandedPageKind::ALL.len());
+    let mut normalized_hidden = Vec::with_capacity(ExpandedPageKind::ALL.len());
     for page in order.iter() {
-        if !normalized.contains(page) {
-            normalized.push(*page);
+        if !normalized_order.contains(page) {
+            normalized_order.push(*page);
         }
     }
-    let changed = normalized != *order;
-    *order = normalized;
+    for page in ExpandedPageKind::ALL {
+        if !normalized_order.contains(&page) {
+            normalized_order.push(page);
+            if page != ExpandedPageKind::Widgets {
+                normalized_hidden.push(page);
+            }
+        }
+    }
+    for page in hidden.iter() {
+        if *page != ExpandedPageKind::Widgets && !normalized_hidden.contains(page) {
+            normalized_hidden.push(*page);
+        }
+    }
+    let changed = normalized_order != *order || normalized_hidden != *hidden;
+    *order = normalized_order;
+    *hidden = normalized_hidden;
     changed
 }
 
