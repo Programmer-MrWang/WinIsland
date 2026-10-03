@@ -13,6 +13,15 @@ let title_width = metrics.width;
 
 This API measures text; it does not render or install a font. Use the measured style again in the draw list to keep layout consistent.
 
+## SDK methods
+
+| Method | Behavior |
+|---|---|
+| `TextApi::measure(text, size, family)` | Measures with weight 400 and upright style. |
+| `TextApi::measure_style(text, &style)` | Since `0.9.1`: measures size, weight, italic, and family from [SDK `TextStyle`](/plugin-dev/api/drawing). |
+
+`measure_style` uses the existing raw `measure` function and ignores alignment, wrapping, and ellipsis fields. `font_family` currently has only the raw ABI method, with no SDK convenience wrapper.
+
 ## Methods
 
 Both methods take `context, token` first and return `PluginStatus`.

@@ -10,6 +10,9 @@ import pluginQuickstartEn from '../plugin-dev/quickstart.md?raw'
 import pluginServicesEn from '../plugin-dev/services.md?raw'
 import pluginApiEn from '../plugin-dev/api.md?raw'
 import pluginApiContextEn from '../plugin-dev/api/context.md?raw'
+import pluginApiActivityEn from '../plugin-dev/api/activity.md?raw'
+import pluginApiSystemEn from '../plugin-dev/api/system.md?raw'
+import pluginApiDrawingEn from '../plugin-dev/api/drawing.md?raw'
 import pluginApiMediaEn from '../plugin-dev/api/media.md?raw'
 import pluginApiI18nEn from '../plugin-dev/api/i18n.md?raw'
 import pluginApiHostStateEn from '../plugin-dev/api/host-state.md?raw'
@@ -37,6 +40,9 @@ import pluginQuickstartZh from '../zh/plugin-dev/quickstart.md?raw'
 import pluginServicesZh from '../zh/plugin-dev/services.md?raw'
 import pluginApiZh from '../zh/plugin-dev/api.md?raw'
 import pluginApiContextZh from '../zh/plugin-dev/api/context.md?raw'
+import pluginApiActivityZh from '../zh/plugin-dev/api/activity.md?raw'
+import pluginApiSystemZh from '../zh/plugin-dev/api/system.md?raw'
+import pluginApiDrawingZh from '../zh/plugin-dev/api/drawing.md?raw'
 import pluginApiMediaZh from '../zh/plugin-dev/api/media.md?raw'
 import pluginApiI18nZh from '../zh/plugin-dev/api/i18n.md?raw'
 import pluginApiHostStateZh from '../zh/plugin-dev/api/host-state.md?raw'
@@ -67,6 +73,9 @@ export const docs = {
     'plugin-dev/services': pluginServicesEn,
     'plugin-dev/api': pluginApiEn,
     'plugin-dev/api/context': pluginApiContextEn,
+    'plugin-dev/api/activity': pluginApiActivityEn,
+    'plugin-dev/api/system': pluginApiSystemEn,
+    'plugin-dev/api/drawing': pluginApiDrawingEn,
     'plugin-dev/api/media': pluginApiMediaEn,
     'plugin-dev/api/i18n': pluginApiI18nEn,
     'plugin-dev/api/host-state': pluginApiHostStateEn,
@@ -97,6 +106,9 @@ export const docs = {
     'plugin-dev/services': pluginServicesZh,
     'plugin-dev/api': pluginApiZh,
     'plugin-dev/api/context': pluginApiContextZh,
+    'plugin-dev/api/activity': pluginApiActivityZh,
+    'plugin-dev/api/system': pluginApiSystemZh,
+    'plugin-dev/api/drawing': pluginApiDrawingZh,
     'plugin-dev/api/media': pluginApiMediaZh,
     'plugin-dev/api/i18n': pluginApiI18nZh,
     'plugin-dev/api/host-state': pluginApiHostStateZh,

@@ -13,6 +13,15 @@ let title_width = metrics.width;
 
 这个 API 只负责测量，不会画文字或安装字体。生成绘制列表时应使用同样的文字样式，避免测量和实际显示不一致。
 
+## SDK 方法
+
+| 方法 | 行为 |
+|---|---|
+| `TextApi::measure(text, size, family)` | 使用 400 字重与正体测量。 |
+| `TextApi::measure_style(text, &style)` | 从 `0.9.1` 起提供：按 [SDK 的 `TextStyle`](/plugin-dev/api/drawing) 的字号、字重、斜体和字体族测量。 |
+
+`measure_style` 复用原始 `measure`，忽略样式中的对齐、换行和省略字段。`font_family` 目前只有原始 ABI 方法，没有 SDK 便捷封装。
+
 ## 方法
 
 两种方法都先接收 `context, token`，并返回 `PluginStatus`。

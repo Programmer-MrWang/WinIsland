@@ -1,12 +1,15 @@
 # Plugin API reference
 
-The ABI v2 host exposes sixteen service tables. Pick a task below, then open its page for the methods, inputs, ownership rules, and limits. If you have not loaded a plugin yet, start with the [quickstart](/plugin-dev/quickstart); the tables below only become available after `create` receives a host and token.
+The ABI v2 host exposes eighteen service tables. Pick a task below, then open its page for the methods, inputs, ownership rules, and limits. If you have not loaded a plugin yet, start with the [quickstart](/plugin-dev/quickstart); the tables below only become available after `create` receives a host and token.
 
 Every service call takes the table's `prefix.context` and the host-issued `PluginToken`. It returns `PluginStatus`; created resources belong to that token. Query a table with `PluginHostV2.query(context, IFACE_*, IFACE_VERSION_1)`, check its size and version, then check each function slot you use. The SDK `Host` wrapper performs these table checks for its convenience methods.
 
 | API | What it provides |
 |---|---|
 | [Context API](/plugin-dev/api/context) | Priority-based activity text for the island |
+| [Activity API](/plugin-dev/api/activity) | Drawn compact activities, priority, expiry, page navigation, and visibility holds |
+| [System API](/plugin-dev/api/system) | Local date/time, Gregorian-to-lunar conversion, and UI language |
+| [Drawing SDK](/plugin-dev/api/drawing) | All drawing commands, color and text helpers, protocol headers, and limits |
 | [Media API](/plugin-dev/api/media) | Now-playing sources, cover art, timeline, and controls |
 | [I18n API](/plugin-dev/api/i18n) | Plugin translation bundles |
 | [Host State API](/plugin-dev/api/host-state) | Media and theme snapshots and change notifications |
@@ -22,6 +25,8 @@ Every service call takes the table's `prefix.context` and the host-issued `Plugi
 | [Image API](/plugin-dev/api/image) | Decoded, uploaded, and album-art image handles |
 | [Store API](/plugin-dev/api/store) | Plugin-scoped persistent byte values |
 | [Log API](/plugin-dev/api/log) | Plugin-tagged diagnostic messages |
+
+The drawing SDK is a local frame builder, not a nineteenth host service. Crate `0.10` adds System; `0.11` adds Activity and the main compact surface kind. Read the corresponding method pages and compatibility notes before declaring these capabilities.
 
 ## Which APIs work together?
 
@@ -45,5 +50,7 @@ The status values are `Ok`, `InvalidArgument`, `StaleHandle`, `CapabilityMissing
 | `LimitExceeded` | Did you hit a quota, supply too small an output buffer, or try to release a resource during its callback? The method page tells these cases apart. |
 
 The SDK turns these statuses into `sdk::Error` values. It also releases owned resources when their wrappers are dropped. Keep those wrappers in your plugin instance; a local variable dropped at the end of `create` will remove the resource immediately.
+
+SDK owned handles expose `Resource::id()`, `Widget::id()`, `ImageHandle::id()`, `CallbackResource::id()`, and `Activity::id()`. IDs remain owned by the same plugin and are not saved across restarts. Raw `PluginToken`, `ResourceId`, `WidgetId`, and `ImageId` expose `get()` and an `INVALID` sentinel; unsafe `from_raw()` only wraps a number and does not validate or grant ownership. Use host-issued values. The fixed-buffer helper `str_to_fixed` initializes metadata and specification strings, truncating at a UTF-8 boundary. `Host::from_raw` is unsafe and must receive the live host/token from plugin creation; `Host::supports(IFACE_*)` checks a table, not permission.
 
 These pages describe the current ABI v2 implementation. The [host services overview](/plugin-dev/services) gives a shorter tour, and the [SDK source](https://github.com/WinIslandProject/WinIsland/tree/master/crates/winisland-plugin-api/src) defines the exact Rust layouts.

@@ -1,6 +1,6 @@
 # 插件开发
 
-WinIsland 插件是通过 ABI v2 加载的 Windows DLL。插件先向 WinIsland 获取一项服务，再用它添加状态文字、媒体源、小组件或设置页等内容。当前 `winisland-plugin-api` 库版本为 `0.9`；现有宿主不能加载 ABI v1 DLL。
+WinIsland 插件是通过 ABI v2 加载的 Windows DLL。插件先向 WinIsland 获取一项服务，再用它添加状态文字、媒体源、小组件或设置页等内容。当前 `winisland-plugin-api` 库版本为 `0.11`；现有宿主不能加载 ABI v1 DLL。
 
 > 插件与 WinIsland 在同一进程运行，没有沙箱。`extern "C"` 回调中的 panic 可能导致应用退出。
 
@@ -10,7 +10,7 @@ WinIsland 插件是通过 ABI v2 加载的 Windows DLL。插件先向 WinIsland 
 |---|---|
 | [快速开始](/plugin-dev/quickstart) | 构建、加载并打包 ABI v2 插件 |
 | [ABI 与生命周期](/plugin-dev/abi-lifecycle) | 描述符校验、所有权、回调、卸载和迁移 |
-| [宿主服务](/plugin-dev/services) | 十六张服务表、绘制、设置与限制 |
+| [宿主服务](/plugin-dev/services) | 十八张服务表、绘制、设置与限制 |
 | [API 参考](/plugin-dev/api) | 每张公开服务表单独一页，列出方法、数据约定和限制 |
 | [打包与安装](/plugin-dev/packaging) | `plugin.yml`、ZIP、签名、安装和更新 |
 | [API 更新日志](/api-changelog) | 已发布库版本的历史记录 |
@@ -59,6 +59,8 @@ DLL 导出 winisland_plugin_entry_v2() -> 静态 PluginDescriptorV2
 | 能力 | 服务表 | 用途 |
 |---|---|---|
 | `CAP_CONTEXT` | `ContextApiV2` | 活动状态文字 |
+| `CAP_ACTIVITY` | `ActivityApiV2` | 自绘活动、优先级、展开目标和保持显示 |
+| `CAP_SYSTEM` | `SystemApiV2` | 本地日期时间、农历与界面语言 |
 | `CAP_MEDIA` | `MediaApiV2` | 媒体源、封面和控制 |
 | `CAP_I18N` | `I18nApiV2` | 翻译资源 |
 | `CAP_HOST_STATE` | `HostStateApiV2` | 媒体/主题快照与订阅 |
@@ -89,4 +91,4 @@ SDK 封装常用调用并构建绘制列表。复杂控件和设置变更需要�
 
 ## 兼容性
 
-库版本 `0.9`、顶层 `ABI_VERSION_2` 与服务表 `IFACE_VERSION_1` 是不同的版本号。新服务表以追加方式扩展，原有 ABI v2 布局不变。但新能力位仍要求新版宿主，旧 ABI v2 宿主可能在 `create` 前就拒绝描述符。`Host::supports(IFACE_*)` 只查询服务表是否存在，不代表已有调用权限，也无法绕过加载阶段的能力检查。读取表字段前检查 `struct_size` 与 `version`。ABI v1 DLL 必须迁移源码并重新打包；只改 `plugin.yml` 无法将其转换为 v2。
+库版本 `0.11`、顶层 `ABI_VERSION_2` 与服务表 `IFACE_VERSION_1` 是不同的版本号。新服务表以追加方式扩展，原有 ABI v2 布局不变。但新能力位仍要求新版宿主，旧 ABI v2 宿主可能在 `create` 前就拒绝描述符。`Host::supports(IFACE_*)` 只查询服务表是否存在，不代表已有调用权限，也无法绕过加载阶段的能力检查。读取表字段前检查 `struct_size` 与 `version`。ABI v1 DLL 必须迁移源码并重新打包；只改 `plugin.yml` 无法将其转换为 v2。

@@ -13,6 +13,15 @@ let page = host.settings()?.create_label_page("sample", "Sample settings", "Plug
 
 For an interactive switch, read its saved value from [Store](/plugin-dev/api/store), put that value in the page data, and create the page with raw `SettingsApiV2`. When `on_change` receives a new value, validate it, save it to Store, and return `Ok` only if you accept it. Settings does not save values automatically. Keep the page key and item keys stable so existing choices can be restored after restart.
 
+## SDK helpers
+
+| Method | Behavior |
+|---|---|
+| `SettingsApi::create_page(key, title)` | Creates one section heading whose text matches the page title. |
+| `SettingsApi::create_label_page(key, title, label)` | Creates one section heading with separate `label` text. |
+
+Both return an owned `Resource` released on drop, share the one-page quota, and create no interactive controls. Interactive items and callbacks still use raw `SettingsApiV2`.
+
 ## Methods
 
 Each method takes `context, token` first and returns `PluginStatus`.

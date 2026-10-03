@@ -18,7 +18,7 @@ cargo new --lib hello-winisland-plugin
 cd hello-winisland-plugin
 ```
 
-Use this `Cargo.toml` with the published `winisland-plugin-api = "0.9"` crate. New extension capabilities also require a host that implements the 0.9 interfaces; updating the plugin dependency does not update the host.
+Use this `Cargo.toml` with the published `winisland-plugin-api = "0.11"` crate. New extension capabilities also require a host that implements the corresponding interfaces; updating the plugin dependency does not update the host.
 
 ```toml
 [package]
@@ -34,7 +34,7 @@ name = "hello_winisland_plugin"
 crate-type = ["cdylib"]
 
 [dependencies]
-winisland-plugin-api = "0.9"
+winisland-plugin-api = "0.11"
 ```
 
 The package ID, name, version, author, and description must agree with the descriptor and the packaged manifest. The repository URL supplies `github-link`.

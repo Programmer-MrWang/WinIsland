@@ -1,6 +1,6 @@
 # Plugin development
 
-WinIsland plugins are Windows DLLs loaded through ABI v2. A plugin asks WinIsland for a service, then uses that service to add content such as activity text, a media source, a widget, or a settings page. The current `winisland-plugin-api` crate is `0.9`; ABI v1 DLLs cannot be loaded by the current host.
+WinIsland plugins are Windows DLLs loaded through ABI v2. A plugin asks WinIsland for a service, then uses that service to add content such as activity text, a media source, a widget, or a settings page. The current `winisland-plugin-api` crate is `0.11`; ABI v1 DLLs cannot be loaded by the current host.
 
 > Plugins run inside WinIsland without a sandbox. A panic in an `extern "C"` callback can terminate the app.
 
@@ -10,7 +10,7 @@ WinIsland plugins are Windows DLLs loaded through ABI v2. A plugin asks WinIslan
 |---|---|
 | [Quickstart](/plugin-dev/quickstart) | Build, load, and package an ABI v2 plugin |
 | [ABI and lifecycle](/plugin-dev/abi-lifecycle) | Descriptor validation, ownership, callbacks, shutdown, and migration |
-| [Host services](/plugin-dev/services) | All sixteen service tables, drawing, settings, and limits |
+| [Host services](/plugin-dev/services) | All eighteen service tables, drawing, settings, and limits |
 | [API reference](/plugin-dev/api) | One page per public service table, with methods, data contracts, and limits |
 | [Packaging and installation](/plugin-dev/packaging) | `plugin.yml`, ZIPs, signing, installation, and updates |
 | [API changelog](/api-changelog) | Historical published crate release notes |
@@ -59,6 +59,8 @@ DLL exports winisland_plugin_entry_v2() -> static PluginDescriptorV2
 | Capability | Table | Purpose |
 |---|---|---|
 | `CAP_CONTEXT` | `ContextApiV2` | Activity text |
+| `CAP_ACTIVITY` | `ActivityApiV2` | Drawn activities, priority, page navigation, and visibility holds |
+| `CAP_SYSTEM` | `SystemApiV2` | Local date/time, lunar conversion, and UI language |
 | `CAP_MEDIA` | `MediaApiV2` | Now-playing source, cover, and controls |
 | `CAP_I18N` | `I18nApiV2` | Translation bundles |
 | `CAP_HOST_STATE` | `HostStateApiV2` | Media/theme snapshot and subscriptions |
@@ -89,4 +91,4 @@ The SDK wraps common calls and builds draw lists. Advanced controls and settings
 
 ## Compatibility
 
-Crate `0.9`, top-level `ABI_VERSION_2`, and service-table `IFACE_VERSION_1` are different version numbers. The new tables are additive; existing ABI v2 layouts remain unchanged. New capability bits still require an updated host: an older ABI v2 host may reject the descriptor before `create`. `Host::supports(IFACE_*)` checks table availability, not capability permission, and cannot bypass that load-time check. Check `struct_size` and `version` before reading a table. ABI v1 DLLs require source migration and repackaging; changing `plugin.yml` alone cannot convert one.
+Crate `0.11`, top-level `ABI_VERSION_2`, and service-table `IFACE_VERSION_1` are different version numbers. The new tables are additive; existing ABI v2 layouts remain unchanged. New capability bits still require an updated host: an older ABI v2 host may reject the descriptor before `create`. `Host::supports(IFACE_*)` checks table availability, not capability permission, and cannot bypass that load-time check. Check `struct_size` and `version` before reading a table. ABI v1 DLLs require source migration and repackaging; changing `plugin.yml` alone cannot convert one.

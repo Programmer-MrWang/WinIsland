@@ -46,8 +46,9 @@ fn create_panel(host: &Host) -> Result<Surface, Error> {
 | `SURFACE_COMPACT_LEFT` / `SURFACE_COMPACT_RIGHT` | 紧凑岛左侧或右侧；请求宽度会被限制为 24–256 个逻辑单位，高度跟随当前紧凑岛。 |
 | `SURFACE_BACKGROUND` | 宿主背景之上、岛内容之下的绘制层。 |
 | `SURFACE_FOREGROUND` | 岛内容之上的绘制层，仍被裁剪在岛内。 |
+| `SURFACE_COMPACT_MAIN` | 从 `0.11.0` 起提供：主紧凑内容，通过 [Activity](/plugin-dev/api/activity) 参与选择；读取 `logical_size()` 获取实际内容尺寸。 |
 
-宿主按 `order`、资源 ID 排序。`SurfaceSpecV2` 的宽高须为 0–2048 范围内的有限数值；它们用于初始化资源，不保证是最终布局尺寸。显示后应读取 `logical_size()`。背景和前景层覆盖当前岛的范围，不会创建独立的原生窗口。
+其他 surface 按 `order`、资源 ID 排序；主紧凑区域则按 Activity 的优先级和更新时间选择。`SurfaceSpecV2` 的宽高须为 0–2048 范围内的有限数值；它们用于初始化资源，不保证是最终布局尺寸。显示后应读取 `logical_size()`。背景和前景层覆盖当前岛的范围，不会创建独立的原生窗口。
 
 ## 方法与所有权
 

@@ -6,11 +6,11 @@
 
 ## 使用 `PluginPackager` 构建
 
-为构建工具启用已发布的 `winisland-plugin-api 0.9` 的 `packager` 功能。插件运行依赖与打包工具应使用同一 API 版本；清单中的 `abi-version` 仍为 `2`。
+为构建工具启用已发布的 `winisland-plugin-api 0.11` 的 `packager` 功能。插件运行依赖与打包工具应使用同一 API 版本；清单中的 `abi-version` 仍为 `2`。
 
 ```toml
 [dev-dependencies]
-winisland-plugin-api = { version = "0.9", features = ["packager"] }
+winisland-plugin-api = { version = "0.11", features = ["packager"] }
 
 [[example]]
 name = "pack"
@@ -35,6 +35,30 @@ fn main() {
 `from_cargo()` 读取 `package.name`、`version`、`authors`（以 `:` 连接）、`description`、`repository`、可选的 `package.metadata.winisland.id`/`name` 和 `lib.name`。根目录第一个匹配的图标（`icon.png`、`.jpg`、`.jpeg`、`.webp`）及 README（`README.md`、`.markdown`、`.txt`）会自动加入。可用 `icon()`、`readme()`、`include_dir()`、`dll_path()` 和 `output()` 覆盖默认值。
 
 描述符的 ID、名称、版本、作者和描述必须与生成的清单文件完全一致。打包工具和安装器在激活前都会加载 DLL 校验描述符。ID 应稳定，并且只能使用 1–63 个 ASCII 字母、数字、下划线或连字符。
+
+## PluginPackager 方法
+
+启用 `packager` 功能并导入 `winisland_plugin_api::packager::PluginPackager`。构造和构建有各自的返回值；可链式调用的配置方法返回 `&mut Self`。
+
+| 方法 | 行为 |
+|---|---|
+| `from_cargo()` | 读取项目元数据和自动发现的资源，返回 `Result<Self, String>`。 |
+| `new(name)` | 创建手动配置；初始 ID 和名称取自参数，DLL 名称把连字符替换为下划线。 |
+| `id(value)`、`name(value)` | 设置稳定插件 ID 和显示名称。 |
+| `author(value)`、`version(value)`、`description(value)` | 设置须与 DLL 描述符一致的元数据。 |
+| `github_link(value)` | 设置清单中的仓库链接。 |
+| `dll_name(name)` | 设置不含 `.dll` 扩展名的 DLL 基名。 |
+| `dll_path(path)` | 覆盖构建出的 DLL 路径。 |
+| `icon(path)` | 加入设置界面使用的图标文件。 |
+| `readme(path)` | 加入详情页使用的 Markdown 或文本文件。 |
+| `include_dir(dir)` | 加入相对插件项目根目录的额外目录，可重复调用。 |
+| `signing_key_path(path)` | 从 PEM 文件加载 Ed25519 签名密钥。 |
+| `signing_key_env(var)` | 从指定名称的环境变量加载签名密钥。 |
+| `signing_key_bytes(key_bytes)` | 从 `&[u8; 64]` 加载 Ed25519 密钥对。 |
+| `output(path)` | 设置 ZIP 输出路径，覆盖默认的 `target/<name>-<version>.zip`。 |
+| `build()` | 构建、校验、打包并按配置签名后，返回 `Result<PathBuf, String>`。 |
+
+签名设置方法会记录加载失败并继续返回 builder，不返回 `Result`，也不会清除之前成功加载的密钥。新 builder 若没有成功加载密钥，将生成未签名安装包。元数据设置方法不会重写 DLL 描述符，因此配置值应与插件本身一致。
 
 ## 清单文件
 

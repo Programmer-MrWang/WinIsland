@@ -21,6 +21,21 @@ if width > 0.0 && height > 0.0 {
 
 此处假设 `widget` 是 SDK 的 `Widget`，并已导入 SDK 绘制类型。[完整示例](https://github.com/WinIslandProject/WinIsland/blob/master/crates/winisland-plugin-api/examples/minimal_widget.rs)还画了文字和封面。`request_redraw` 是请求重画已有帧；画面内容变了，要提交新列表。
 
+## SDK 规格与句柄方法
+
+| 方法 | 行为 |
+|---|---|
+| `WidgetSpec::new(key)` | 初始化 ABI 大小、单格规格和稳定键。 |
+| `WidgetSpec::span(columns, rows)` | 返回设置了所需网格跨度的规格。 |
+| `WidgetSpec::title(title)` | 返回复制了标题的规格。 |
+| `WidgetApi::create(spec)` | 返回在销毁时释放的小组件句柄。 |
+| `Widget::id()` | 返回宿主签发的 `WidgetId`，用于输入与事件。 |
+| `Widget::logical_size()` | 返回逻辑尺寸，失败时为 `(0, 0)`。 |
+| `Widget::submit(list)` | 复制借用的完整 `DrawList`，返回提交状态。 |
+| `Widget::request_redraw()` | 尽力请求重绘，丢弃宿主错误。 |
+
+SDK 把固定键和标题复制进 ABI 缓冲区，并在 UTF-8 字符边界截断过长内容。键仍应满足宿主的 ASCII 长度限制；辅助方法不会绕过校验。仅构建规格不会创建宿主资源。
+
 ## 方法
 
 所有方法先接收 `context, token`，并返回 `PluginStatus`。
@@ -43,5 +58,7 @@ if width > 0.0 && height > 0.0 {
 提交成功只代表宿主复制了字节；宿主稍后校验、准备，并在网格区域内裁剪重放。单份列表最多 4 MiB、4096 条命令；反复提交错误帧可能禁用小组件。每插件的小组件与 surface 共享 8 个资源、4 MiB 已存储绘制列表的配额。`PluginDescriptorV2.on_tick` 在插件工作线程运行，可用于生成新帧。需要交互时，在 `CAP_WIDGET` 之外声明 `CAP_INPUT | CAP_EVENTS`，通过 [Input](/plugin-dev/api/input) 设置逻辑区域，再用 [Events](/plugin-dev/api/events) 针对此小组件订阅 `EVENT_INPUT`。`set_animation(widget.id(), false)` 可以关闭连续 tick 而保留订阅。独立页面、紧凑区域或绘制层应使用 [Surface](/plugin-dev/api/surface)。
 
 参见[小组件示例](https://github.com/WinIslandProject/WinIsland/blob/master/crates/winisland-plugin-api/examples/minimal_widget.rs)和[绘制协议](https://github.com/WinIslandProject/WinIsland/blob/master/crates/winisland-plugin-api/src/draw/v2.rs)。
+
+完整命令与辅助类型见[绘制 SDK](/plugin-dev/api/drawing)，包括 `Rgba::with_alpha`、文字样式、栈操作、渐变、描边、图片和协议头。
 
 [返回 API 目录](/plugin-dev/api)

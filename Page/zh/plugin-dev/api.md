@@ -1,12 +1,15 @@
 # 插件 API 参考
 
-ABI v2 提供十六张宿主服务表。先按要做的事选择 API，再进对应页面看方法、输入、资源归属和限制。如果还没成功加载过插件，请先做[快速开始](/plugin-dev/quickstart)；只有 `create` 收到宿主和令牌后才能使用这些服务。
+ABI v2 提供十八张宿主服务表。先按要做的事选择 API，再进对应页面看方法、输入、资源归属和限制。如果还没成功加载过插件，请先做[快速开始](/plugin-dev/quickstart)；只有 `create` 收到宿主和令牌后才能使用这些服务。
 
 每个服务调用都需要传入表中的 `prefix.context` 和宿主签发的 `PluginToken`，并返回 `PluginStatus`。创建的资源归该令牌所有。原始调用通过 `PluginHostV2.query(context, IFACE_*, IFACE_VERSION_1)` 获取服务表，检查表的大小、版本和所需函数槽。SDK 的 `Host` 封装会为便捷方法执行这些检查。
 
 | API | 提供的能力 |
 |---|---|
 | [Context API](/plugin-dev/api/context) | 按优先级显示活动状态文字 |
+| [Activity API](/plugin-dev/api/activity) | 自绘紧凑活动、优先级、超时、关联展开页和保持显示 |
+| [System API](/plugin-dev/api/system) | 本地日期时间、公历转农历，以及当前界面语言 |
+| [绘制 SDK](/plugin-dev/api/drawing) | 全部绘制命令、颜色与文字辅助类型、协议头和限制 |
 | [Media API](/plugin-dev/api/media) | 媒体源、封面、进度和控制 |
 | [I18n API](/plugin-dev/api/i18n) | 插件翻译资源 |
 | [Host State API](/plugin-dev/api/host-state) | 媒体与主题状态及变化通知 |
@@ -22,6 +25,8 @@ ABI v2 提供十六张宿主服务表。先按要做的事选择 API，再进对
 | [Image API](/plugin-dev/api/image) | 解码、上传和封面图片句柄 |
 | [Store API](/plugin-dev/api/store) | 插件独立命名空间中的持久化字节数据 |
 | [Log API](/plugin-dev/api/log) | 带插件标识的诊断日志 |
+
+绘制 SDK 是本地帧构建工具，不是第十九张宿主服务表。crate `0.10` 新增 System，`0.11` 新增 Activity 与主紧凑 surface 类型。声明这些能力前，应阅读对应方法页与兼容性说明。
 
 ## 常见功能要组合哪些 API？
 
@@ -47,3 +52,5 @@ ABI v2 提供十六张宿主服务表。先按要做的事选择 API，再进对
 SDK 会把这些状态转成 `sdk::Error`，并在包装对象被丢弃时释放资源。因此要把包装对象存在插件实例里；如果只放在 `create` 的局部变量里，函数结束后资源就会被移除。
 
 本文档对应当前 ABI v2 实现。[宿主服务概览](/plugin-dev/services)提供简短介绍；精确的 Rust 布局以 [SDK 源码](https://github.com/WinIslandProject/WinIsland/tree/master/crates/winisland-plugin-api/src)为准。
+
+SDK 资源句柄提供 `Resource::id()`、`Widget::id()`、`ImageHandle::id()`、`CallbackResource::id()` 和 `Activity::id()`。ID 仍归同一插件所有，不应跨重启保存。原始 `PluginToken`、`ResourceId`、`WidgetId` 和 `ImageId` 提供 `get()` 及 `INVALID` 哨兵值；不安全的 `from_raw()` 只包装数字，不会校验或授予所有权，应使用宿主签发的值。固定缓冲区辅助方法 `str_to_fixed` 初始化元数据和规格中的字符串，并按 UTF-8 边界截断。`Host::from_raw` 是不安全方法，须接收创建插件时的有效宿主与令牌；`Host::supports(IFACE_*)` 只检查服务表，不代表调用权限。

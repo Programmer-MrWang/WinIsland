@@ -13,6 +13,15 @@ let page = host.settings()?.create_label_page("sample", "示例设置", "插件�
 
 要做可操作的开关，先从 [Store](/plugin-dev/api/store) 读取旧值，把它填入页面数据，再用原始 `SettingsApiV2` 创建页面。`on_change` 收到新值时，先校验，再写入 Store；接受后才返回 `Ok`。Settings 不会自动保存用户选择。页面键和设置项键应保持稳定，才能在重启后恢复对应值。
 
+## SDK 辅助方法
+
+| 方法 | 行为 |
+|---|---|
+| `SettingsApi::create_page(key, title)` | 创建含单个章节标题的页面，章节文字与页面标题相同。 |
+| `SettingsApi::create_label_page(key, title, label)` | 创建含单个章节标题的页面，章节文字由 `label` 单独指定。 |
+
+两者均返回在销毁时释放的 `Resource`，共享每插件一个设置页的配额，不创建交互控件；交互项与回调仍需原始 `SettingsApiV2`。
+
 ## 方法
 
 所有方法先接收 `context, token`，并返回 `PluginStatus`。

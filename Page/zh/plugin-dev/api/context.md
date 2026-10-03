@@ -31,4 +31,6 @@ SDK 便捷方法没有更新接口。文字变化时用原始 `update`；反复 
 
 参见[快速开始示例](/plugin-dev/quickstart)和[数据类型定义](https://github.com/WinIslandProject/WinIsland/blob/master/crates/winisland-plugin-api/src/types/v2/context.rs)。
 
+从 `0.11.0` 起，Context 文字与音乐、计时器及插件活动按优先级、更新时间和资源 ID 统一选择。此兼容文字接口没有自绘 surface、关联展开页或保持显示声明；需要这些能力时使用 [Activity API](/plugin-dev/api/activity)。
+
 [返回 API 目录](/plugin-dev/api)

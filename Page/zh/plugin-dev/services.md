@@ -1,12 +1,14 @@
 # 宿主服务
 
-ABI v2 通过 `PluginHostV2.query` 提供十六张带版本号的服务表。本页为概览；[API 参考](/plugin-dev/api)逐页列出各服务表的方法和数据约定。SDK 的 `Host` 封装常见操作；`winisland_plugin_api::abi` 中的原始服务表提供全部函数。每张表都以 `TablePrefix` 开头，当前表版本为 `IFACE_VERSION_1`。调用前检查所需函数槽。除日志服务外，需在 `PluginDescriptorV2` 声明对应 `CAP_*` 能力。
+ABI v2 通过 `PluginHostV2.query` 提供十八张带版本号的服务表。本页为概览；[API 参考](/plugin-dev/api)逐页列出各服务表的方法和数据约定。SDK 的 `Host` 封装常见操作；`winisland_plugin_api::abi` 中的原始服务表提供全部函数。每张表都以 `TablePrefix` 开头，当前表版本为 `IFACE_VERSION_1`。调用前检查所需函数槽。除日志服务外，需在 `PluginDescriptorV2` 声明对应 `CAP_*` 能力。
 
 可以把服务理解为 WinIsland 的一个功能入口：能力位表示“我要用它”，查询服务表拿到函数，调用 `create` 或 `register` 后拿到自己负责释放的资源。内容还需要显示时，就保留 SDK 对象或原始 ID。
 
 | 能力 | 原始服务表 | SDK 入口 | 主要操作 |
 |---|---|---|---|
 | `CAP_CONTEXT` | `ContextApiV2` | `host.context()?` | 创建、更新、释放活动文字 |
+| `CAP_ACTIVITY` | `ActivityApiV2` | `host.activities()?` | 自绘活动、优先级、展开目标和保持显示 |
+| `CAP_SYSTEM` | `SystemApiV2` | `host.system()?` | 本地日期时间、农历与界面语言 |
 | `CAP_MEDIA` | `MediaApiV2` | `host.media()?` | 发布媒体源、读取当前标题 |
 | `CAP_I18N` | `I18nApiV2` | `host.i18n()?`（仅查询） | 注册/释放翻译资源 |
 | `CAP_HOST_STATE` | `HostStateApiV2` | `host.host_state()?` | 获取/订阅媒体与主题状态 |
@@ -22,6 +24,12 @@ ABI v2 通过 `PluginHostV2.query` 提供十六张带版本号的服务表。本
 | `CAP_IMAGE` | `ImageApiV2` | `host.images()?` | 解码、上传、获取封面、释放图片 |
 | `CAP_STORE` | `StoreApiV2` | `host.store()?` | 读写、删除插件命名空间中的字节数据 |
 | 无 | `LogApiV2` | `host.log()` | 写入插件日志 |
+
+## 活动与系统数据
+
+[Activity](/plugin-dev/api/activity) 绑定 `SURFACE_COMPACT_MAIN` 与可选的 `SURFACE_PAGE`。宿主按优先级和更新时间，将其与原生音乐、计时器及旧文字状态统一比较。需要阻止无活动自动隐藏的持续任务可声明 `ACTIVITY_KEEP_VISIBLE`；活动须仍可参与展示。到期只停止显示，结束后仍应释放句柄。简单文字状态继续使用 Context。
+
+[System](/plugin-dev/api/system) 提供本地日期时间、可选的中国农历转换，以及当前 WinIsland 界面语言，不创建资源句柄。内置插件可通过公开服务读取这些数据，无需导入宿主的日期或语言实现。
 
 ## 活动状态文字与媒体
 
@@ -53,9 +61,9 @@ Events 还提供可见性/尺寸通知、岛状态、定时器和按目标开关
 
 ## 设置、文字、图片、存储和日志
 
-`SettingsApiV2` 接收声明式 `SettingsPageDataV2`，包含稳定的页面键、标题、可选图标以及章节、分组、标签、开关、选择框、步进器和按钮等设置项。`on_change` 可以接受或拒绝用户操作。SDK `create_label_page` 创建简单文字页；交互控件与回调需使用原始服务表。需要跨重启保存时，显式写入存储服务，并在创建页面时恢复值。
+`SettingsApiV2` 接收声明式 `SettingsPageDataV2`，包含稳定的页面键、标题、可选图标以及章节、分组、标签、开关、选择框、步进器和按钮等设置项。`on_change` 可以接受或拒绝用户操作。SDK `create_page` 使用页面标题创建章节，`create_label_page` 则单独指定章节文字；交互控件与回调需使用原始服务表。需要跨重启保存时，显式写入存储服务，并在创建页面时恢复值。
 
-`TextApiV2.measure` 使用带字号、字重、斜体标记和 UTF-8 字体族的 `TextStyleV2`；`font_family` 返回宿主字体族。SDK `measure` 便捷方法使用 400 字重和正体。`ImageApiV2` 可解码 PNG/JPEG/WebP、上传 RGBA 或获取当前封面；图片 ID 持有至释放。获取的封面句柄在曲目变化后仍保留旧图。
+`TextApiV2.measure` 使用带字号、字重、斜体标记和 UTF-8 字体族的 `TextStyleV2`；`font_family` 返回宿主字体族。SDK `measure` 便捷方法使用 400 字重和正体；`measure_style` 按 SDK 的 `TextStyle` 测量。完整绘制方法见[绘制 SDK](/plugin-dev/api/drawing)。`ImageApiV2` 可解码 PNG/JPEG/WebP、上传 RGBA 或获取当前封面；图片 ID 持有至释放。获取的封面句柄在曲目变化后仍保留旧图。
 
 `StoreApiV2` 在插件独立命名空间持久化字节；单个值最多 1 MiB。`LogApiV2.write` 使用数字级别，没有能力门槛。SDK `LogApi::write` 和 `Widget::request_redraw` 会忽略错误；需要状态时使用原始表。
 
@@ -63,4 +71,4 @@ Events 还提供可见性/尺寸通知、岛状态、定时器和按目标开关
 
 ## 资源限制与错误
 
-当前每个插件的限制为：64 条活动状态文字、4 个媒体源（合计 32 MiB）、16 个翻译资源（4 MiB）、小组件与 surface 合计 8 个（4 MiB）、4 个歌词转换器、1 个设置页（2 MiB）、64 张图片（64 MiB）、16 个宿主状态订阅、Events 订阅与定时器合计 128 个、64 个命令。宿主通过 `PluginStatus` 拒绝过期、属于其他插件的句柄和超额资源。`shutdown` 返回成功前应主动释放资源；宿主之后会撤销剩余资源。
+当前每个插件的限制为：64 个 Activity、64 条 Context 状态文字、4 个媒体源（合计 32 MiB）、16 个翻译资源（4 MiB）、小组件与 surface 合计 8 个（4 MiB）、4 个歌词转换器、1 个设置页（2 MiB）、64 张图片（64 MiB）、16 个宿主状态订阅、Events 订阅与定时器合计 128 个、64 个命令。宿主通过 `PluginStatus` 拒绝过期、属于其他插件的句柄和超额资源。`shutdown` 返回成功前应主动释放资源；宿主之后会撤销剩余资源。

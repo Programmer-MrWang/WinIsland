@@ -46,8 +46,9 @@ Subscribe to `EVENT_RESIZE` for this page and rebuild its drawing and [input reg
 | `SURFACE_COMPACT_LEFT` / `SURFACE_COMPACT_RIGHT` | Content at the corresponding compact edge. The host clamps requested width to 24–256 logical units and supplies the current compact height. |
 | `SURFACE_BACKGROUND` | A drawing layer above the host background and below island content. |
 | `SURFACE_FOREGROUND` | A drawing layer above island content, clipped to the island. |
+| `SURFACE_COMPACT_MAIN` | Since `0.11.0`: main compact content selected through [Activity](/plugin-dev/api/activity); read `logical_size()` for the presented content size. |
 
-The host sorts surfaces by `order`, then by resource ID. Dimensions in `SurfaceSpecV2` must be finite and in 0–2048; they initialize the resource, but are not a guarantee of its eventual layout. Read `logical_size()` after presentation. Layers cover the current island bounds and do not create separate native windows.
+The host sorts other surfaces by `order`, then by resource ID; the main compact region is selected by Activity priority and update time. Dimensions in `SurfaceSpecV2` must be finite and in 0–2048; they initialize the resource, but are not a guarantee of its eventual layout. Read `logical_size()` after presentation. Layers cover the current island bounds and do not create separate native windows.
 
 ## Methods and ownership
 

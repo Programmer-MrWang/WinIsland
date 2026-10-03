@@ -11,6 +11,9 @@ export type DocKey =
   | 'plugin-dev/services'
   | 'plugin-dev/api'
   | 'plugin-dev/api/context'
+  | 'plugin-dev/api/activity'
+  | 'plugin-dev/api/system'
+  | 'plugin-dev/api/drawing'
   | 'plugin-dev/api/media'
   | 'plugin-dev/api/i18n'
   | 'plugin-dev/api/host-state'
@@ -41,6 +44,9 @@ export const DOC_KEYS: DocKey[] = [
   'plugin-dev/services',
   'plugin-dev/api',
   'plugin-dev/api/context',
+  'plugin-dev/api/activity',
+  'plugin-dev/api/system',
+  'plugin-dev/api/drawing',
   'plugin-dev/api/media',
   'plugin-dev/api/i18n',
   'plugin-dev/api/host-state',
@@ -164,6 +170,9 @@ export const copy = {
         'plugin-dev/services': 'Host services',
         'plugin-dev/api': 'API reference',
         'plugin-dev/api/context': 'Context API',
+        'plugin-dev/api/activity': 'Activity API',
+        'plugin-dev/api/system': 'System API',
+        'plugin-dev/api/drawing': 'Drawing SDK',
         'plugin-dev/api/media': 'Media API',
         'plugin-dev/api/i18n': 'I18n API',
         'plugin-dev/api/host-state': 'Host State API',
@@ -286,6 +295,9 @@ export const copy = {
         'plugin-dev/services': '宿主服务',
         'plugin-dev/api': 'API 参考',
         'plugin-dev/api/context': 'Context API',
+        'plugin-dev/api/activity': 'Activity API',
+        'plugin-dev/api/system': 'System API',
+        'plugin-dev/api/drawing': '绘制 SDK',
         'plugin-dev/api/media': 'Media API',
         'plugin-dev/api/i18n': 'I18n API',
         'plugin-dev/api/host-state': 'Host State API',

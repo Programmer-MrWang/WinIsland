@@ -1,12 +1,14 @@
 # Host services
 
-ABI v2 exposes sixteen versioned service tables through `PluginHostV2.query`. This page is a tour; the [API reference](/plugin-dev/api) documents each table's methods and data contract. The SDK `Host` wrapper covers common operations; the raw tables in `winisland_plugin_api::abi` expose every function. Each raw table starts with `TablePrefix` and currently uses `IFACE_VERSION_1`. Validate required function slots before calling them. Except for Log, declare the matching `CAP_*` bit in `PluginDescriptorV2`.
+ABI v2 exposes eighteen versioned service tables through `PluginHostV2.query`. This page is a tour; the [API reference](/plugin-dev/api) documents each table's methods and data contract. The SDK `Host` wrapper covers common operations; the raw tables in `winisland_plugin_api::abi` expose every function. Each raw table starts with `TablePrefix` and currently uses `IFACE_VERSION_1`. Validate required function slots before calling them. Except for Log, declare the matching `CAP_*` bit in `PluginDescriptorV2`.
 
 Think of a service as an entry point into one part of WinIsland. A capability bit says your plugin needs it; querying the table gives you its functions; calling `create` or `register` gives you an owned resource. Keep the returned SDK object or raw ID for as long as the content should exist.
 
 | Capability | Raw table | SDK access | Main operations |
 |---|---|---|---|
 | `CAP_CONTEXT` | `ContextApiV2` | `host.context()?` | Create, update, release activity text |
+| `CAP_ACTIVITY` | `ActivityApiV2` | `host.activities()?` | Drawn activities, priority, page navigation, and visibility holds |
+| `CAP_SYSTEM` | `SystemApiV2` | `host.system()?` | Local date/time, lunar conversion, and UI language |
 | `CAP_MEDIA` | `MediaApiV2` | `host.media()?` | Publish a media source and read current title |
 | `CAP_I18N` | `I18nApiV2` | `host.i18n()?` (query only) | Register and release translation bundles |
 | `CAP_HOST_STATE` | `HostStateApiV2` | `host.host_state()?` | Read or subscribe to media/theme state |
@@ -22,6 +24,12 @@ Think of a service as an entry point into one part of WinIsland. A capability bi
 | `CAP_IMAGE` | `ImageApiV2` | `host.images()?` | Decode, upload, use album art, release |
 | `CAP_STORE` | `StoreApiV2` | `host.store()?` | Get, set, delete plugin-scoped bytes |
 | None | `LogApiV2` | `host.log()` | Write plugin log messages |
+
+## Activities and system data
+
+[Activity](/plugin-dev/api/activity) binds a `SURFACE_COMPACT_MAIN` and an optional `SURFACE_PAGE`. The host compares activities with native music, timers, and legacy text by priority and update time. Use `ACTIVITY_KEEP_VISIBLE` for an eligible ongoing task that should hold off inactivity auto-hide. Expiry hides the activity without freeing its handle; release it when done. Context remains the simple text option.
+
+[System](/plugin-dev/api/system) supplies local date/time, optional Chinese lunar conversion, and the current WinIsland UI language. It requires no resource handles and lets built-in plugins use public services instead of importing host date or language implementations.
 
 ## Context and Media
 
@@ -53,7 +61,7 @@ A lyric transformer runs after lyrics are parsed. It uses a size query and then 
 
 ## Settings, Text, Image, Store, and Log
 
-`SettingsApiV2` accepts a declarative `SettingsPageDataV2` with a stable page key, title, optional icon, and items: section, group, label, switch, select, stepper, and button. Its `on_change` callback can accept or reject a user action. SDK `create_label_page` creates a simple label page; use the raw table for interactive items and callbacks. Persist values explicitly with Store, then repopulate item values on create.
+`SettingsApiV2` accepts a declarative `SettingsPageDataV2` with a stable page key, title, optional icon, and items: section, group, label, switch, select, stepper, and button. Its `on_change` callback can accept or reject a user action. SDK `create_page` uses the title as its section heading; `create_label_page` supplies separate section text; use the raw table for interactive items and callbacks. Persist values explicitly with Store, then repopulate item values on create.
 
 `TextApiV2.measure` accepts `TextStyleV2` with size, weight, italic flag, and UTF-8 font family; `font_family` reports host families. The SDK `measure` convenience call uses weight 400 and upright style. `ImageApiV2` can decode PNG/JPEG/WebP, upload RGBA pixels, or capture current album art; image IDs remain owned until release. A captured album-art handle keeps its image after the cover changes.
 
@@ -63,4 +71,4 @@ For a setting such as “show seconds,” read its Store value during `create`, 
 
 ## Resource limits and errors
 
-Current per-plugin resource limits are 64 Contexts, 4 Media sources (32 MiB total), 16 i18n bundles (4 MiB), 8 Widgets and Surfaces combined (4 MiB), 4 lyric transformers, 1 Settings page (2 MiB), 64 Images (64 MiB), 16 Host State subscriptions, 128 Events subscriptions/timers combined, and 64 Commands. The host rejects stale or foreign handles and quota overflows using `PluginStatus`. Releases should occur before successful shutdown; the host revokes remaining resources afterward.
+Current per-plugin resource limits are 64 Activities, 64 Contexts, 4 Media sources (32 MiB total), 16 i18n bundles (4 MiB), 8 Widgets and Surfaces combined (4 MiB), 4 lyric transformers, 1 Settings page (2 MiB), 64 Images (64 MiB), 16 Host State subscriptions, 128 Events subscriptions/timers combined, and 64 Commands. The host rejects stale or foreign handles and quota overflows using `PluginStatus`. Releases should occur before successful shutdown; the host revokes remaining resources afterward.

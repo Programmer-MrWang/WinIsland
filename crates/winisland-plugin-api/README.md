@@ -13,10 +13,10 @@ Create a Rust `cdylib` with `winisland-plugin-api` as a dependency. Export `wini
 crate-type = ["cdylib"]
 
 [dependencies]
-winisland-plugin-api = "0.10"
+winisland-plugin-api = "0.11"
 ```
 
-The host passes a plugin token and an instance-owned `PluginHostV2` table to `create`. Query service tables through the SDK `Host` wrapper or through `PluginHostV2.query`. The seventeen interfaces cover context, media, translations, host state, widgets, lyrics, settings, text, images, store, logging, input, commands, surfaces, events, media sessions, and system data. Each resource belongs to the plugin token that created it.
+The host passes a plugin token and an instance-owned `PluginHostV2` table to `create`. Query service tables through the SDK `Host` wrapper or through `PluginHostV2.query`. The eighteen interfaces cover context, activities, media, translations, host state, widgets, lyrics, settings, text, images, store, logging, input, commands, surfaces, events, media sessions, and system data. Each resource belongs to the plugin token that created it.
 
 ## Lifecycle and drawing
 
@@ -36,6 +36,7 @@ The SDK wraps common calls; the ABI tables in `src/abi` expose the full interfac
 | `TextApi::measure_style` | Available since 0.9.1. Measures using a `TextStyle`'s size, weight, italic style, and family through the existing `TextApiV2` table. |
 | `Host::system`, `SystemApi::local_datetime`, `lunar_date`, `current_language` | Available since 0.10.0. Declare `CAP_SYSTEM` to read local date/time, convert valid Gregorian dates to Chinese lunar dates, or read the current WinIsland UI language. Lunar conversion returns `None` when a result is unavailable. Requires a host implementing `IFACE_SYSTEM`; methods return errors for missing capabilities, invalid dates, or unavailable services. |
 | `Rgba::with_alpha` | Available since 0.10.0. Returns a color with the requested alpha and unchanged RGB channels. |
+| `Host::activities`, `Activities::create`, `Activity::id`, `Activity::update` | Available since 0.11.0. Declare `CAP_ACTIVITY` and create a `SURFACE_COMPACT_MAIN` surface through `CAP_SURFACE`. An activity binds that surface and an optional owned expanded page, with priority, timeout, preferred dimensions, and an optional inactivity auto-hide hold. Keep the activity and surfaces in your instance; dropping the activity releases it. Expiry only hides the activity. |
 | `ImageApi::decode`, `upload_rgba`, `album_art` | Return an owned image handle, released on drop. An album-art handle keeps its image after the current cover changes. |
 | `StoreApi::get`, `set`, `delete` | Operate in the plugin's own persistent namespace. `get` returns `None` for an absent key and may report a size error if the value changes between its length query and read. |
 
@@ -47,7 +48,7 @@ A package is a ZIP containing `plugin.yml` and the DLL named by its `entry` fiel
 
 ```toml
 [dev-dependencies]
-winisland-plugin-api = { version = "0.10", features = ["packager"] }
+winisland-plugin-api = { version = "0.11", features = ["packager"] }
 ```
 
 ```rust,no_run

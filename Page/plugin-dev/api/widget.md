@@ -21,6 +21,21 @@ if width > 0.0 && height > 0.0 {
 
 The example assumes `widget` is an SDK `Widget` and the SDK drawing types are imported. The [complete example](https://github.com/WinIslandProject/WinIsland/blob/master/crates/winisland-plugin-api/examples/minimal_widget.rs) also draws text and album art. `request_redraw` asks the host to repaint an existing frame; submit a new list when the drawing itself changes.
 
+## SDK specification and handle methods
+
+| Method | Behavior |
+|---|---|
+| `WidgetSpec::new(key)` | Initialize the ABI size and a one-cell specification with a stable key. |
+| `WidgetSpec::span(columns, rows)` | Return the specification with its requested grid span. |
+| `WidgetSpec::title(title)` | Return the specification with the copied title. |
+| `WidgetApi::create(spec)` | Return an owned widget released on drop. |
+| `Widget::id()` | Return its host-issued `WidgetId` for input and events. |
+| `Widget::logical_size()` | Return logical dimensions, or `(0, 0)` on failure. |
+| `Widget::submit(list)` | Copy a borrowed complete `DrawList` and return its submission status. |
+| `Widget::request_redraw()` | Best-effort redraw request that discards host errors. |
+
+Fixed SDK keys and titles are copied into their ABI buffers and truncate at a UTF-8 character boundary. Choose keys within the host's ASCII key limit; the helper does not bypass validation. The specification builder alone creates no host resource.
+
 ## Methods
 
 Each method takes `context, token` first and returns `PluginStatus`.
@@ -43,5 +58,7 @@ Create a new complete list with `DrawListBuilder::new(Size::new(width, height))`
 Submission success means the bytes were copied. The host validates and prepares the list later, then clips and replays it inside the widget's grid area. A list is limited to 4 MiB and 4096 commands; repeated malformed frames can disable the widget. Widgets and surfaces share a quota of eight resources and 4 MiB of stored draw lists per plugin. `PluginDescriptorV2.on_tick` runs on a plugin worker and can be used to build new frames. For interaction, declare `CAP_INPUT | CAP_EVENTS` in addition to `CAP_WIDGET`, set logical regions with [Input](/plugin-dev/api/input), and subscribe to `EVENT_INPUT` for this widget through [Events](/plugin-dev/api/events). `set_animation(widget.id(), false)` disables its continuous ticks without removing subscriptions. For independent pages or compact/layer content, use [Surface](/plugin-dev/api/surface).
 
 See the [widget example](https://github.com/WinIslandProject/WinIsland/blob/master/crates/winisland-plugin-api/examples/minimal_widget.rs) and [draw protocol](https://github.com/WinIslandProject/WinIsland/blob/master/crates/winisland-plugin-api/src/draw/v2.rs).
+
+See the [Drawing SDK](/plugin-dev/api/drawing) for every command and helper, including `Rgba::with_alpha`, text styles, stacks, gradients, strokes, images, and protocol headers.
 
 [All plugin APIs](/plugin-dev/api)

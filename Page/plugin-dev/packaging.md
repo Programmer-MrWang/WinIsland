@@ -6,11 +6,11 @@ Use a root-level DLL only for a quick local run. Use a ZIP when you want to shar
 
 ## Build with PluginPackager
 
-Enable the `packager` feature of the published `winisland-plugin-api 0.9` crate. Use the same API version for the plugin and its build tool; the manifest still uses `abi-version: 2`.
+Enable the `packager` feature of the published `winisland-plugin-api 0.11` crate. Use the same API version for the plugin and its build tool; the manifest still uses `abi-version: 2`.
 
 ```toml
 [dev-dependencies]
-winisland-plugin-api = { version = "0.9", features = ["packager"] }
+winisland-plugin-api = { version = "0.11", features = ["packager"] }
 
 [[example]]
 name = "pack"
@@ -35,6 +35,30 @@ Run `cargo run --example pack` from the plugin project root. The packager runs `
 `from_cargo()` reads `package.name`, `version`, `authors` (joined with `:`), `description`, `repository`, optional `package.metadata.winisland.id`/`name`, and `lib.name`. The first matching root icon (`icon.png`, `.jpg`, `.jpeg`, `.webp`) and README (`README.md`, `.markdown`, `.txt`) are included automatically. `icon()`, `readme()`, `include_dir()`, `dll_path()`, and `output()` override these choices.
 
 The descriptor's ID, name, version, author, and description must match the generated manifest exactly. The packager and installer both load the DLL for descriptor validation before activation. Choose a stable ID of 1–63 ASCII letters, digits, underscores, or hyphens.
+
+## PluginPackager methods
+
+Enable the `packager` feature and import `winisland_plugin_api::packager::PluginPackager`. Constructors and build results are separate from the chainable configuration methods, which return `&mut Self`.
+
+| Method | Behavior |
+|---|---|
+| `from_cargo()` | Returns `Result<Self, String>` from project metadata and discovered assets. |
+| `new(name)` | Creates manual metadata; starts with that ID/name and a DLL name with hyphens replaced by underscores. |
+| `id(value)`, `name(value)` | Set the stable plugin ID and displayed name. |
+| `author(value)`, `version(value)`, `description(value)` | Set metadata that must match the DLL descriptor. |
+| `github_link(value)` | Set the repository link in the manifest. |
+| `dll_name(name)` | Set the DLL basename without `.dll`. |
+| `dll_path(path)` | Override the built DLL location. |
+| `icon(path)` | Include the settings icon file. |
+| `readme(path)` | Include the Markdown or text details file. |
+| `include_dir(dir)` | Include an extra directory relative to the plugin project root; may be called repeatedly. |
+| `signing_key_path(path)` | Load an Ed25519 signing key from a PEM file. |
+| `signing_key_env(var)` | Load a signing key from the named environment variable. |
+| `signing_key_bytes(key_bytes)` | Load an Ed25519 keypair from `&[u8; 64]`. |
+| `output(path)` | Set the output ZIP path instead of the default `target/<name>-<version>.zip`. |
+| `build()` | Returns `Result<PathBuf, String>` after building, validating, packaging, and optionally signing the plugin. |
+
+Signing setters log loading failures and still return the builder; they do not return `Result` or clear a previously loaded key. A fresh builder with no successfully loaded key produces an unsigned package. Metadata setters do not rewrite the DLL descriptor, so keep the configured values consistent with the plugin itself.
 
 ## Manifest
 
