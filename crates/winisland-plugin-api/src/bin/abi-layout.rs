@@ -13,8 +13,8 @@ use winisland_plugin_api::types::v2::settings::{
 };
 use winisland_plugin_api::types::v2::widget::WidgetSpecV2;
 use winisland_plugin_api::types::v2::{
-    ByteSlice, ImageId, LocalDateTimeV2, LunarDateV2, PluginToken, ResourceId, TextMetricsV2,
-    TextStyleV2, Utf8Slice, WidgetId,
+    ActivitySpecV2, ByteSlice, ImageId, LocalDateTimeV2, LunarDateV2, PluginToken, ResourceId,
+    TextMetricsV2, TextStyleV2, Utf8Slice, WidgetId,
 };
 
 macro_rules! show {
@@ -25,6 +25,18 @@ macro_rules! show {
 }
 
 fn main() {
+    show!(ActivityApiV2, prefix, create, update, release);
+    show!(
+        ActivitySpecV2,
+        struct_size,
+        flags,
+        priority,
+        timeout_ms,
+        compact_surface,
+        expanded_page,
+        preferred_width,
+        preferred_height
+    );
     for (name, size, align) in [
         (
             "PluginToken",

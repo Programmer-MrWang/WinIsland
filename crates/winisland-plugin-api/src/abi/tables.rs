@@ -1,6 +1,7 @@
 use crate::types::v2::{
-    CommandExecuteFnV2, CommandInfoV2, CommandSpecV2, EventSubscriptionV2, InputRegionV2,
-    IslandStateV2, LocalDateTimeV2, LunarDateV2, MediaSessionV2, SurfaceSpecV2, TimerSpecV2,
+    ActivitySpecV2, CommandExecuteFnV2, CommandInfoV2, CommandSpecV2, EventSubscriptionV2,
+    InputRegionV2, IslandStateV2, LocalDateTimeV2, LunarDateV2, MediaSessionV2, SurfaceSpecV2,
+    TimerSpecV2,
 };
 use std::ffi::c_void;
 
@@ -33,6 +34,29 @@ pub struct ContextApiV2 {
             PluginToken,
             ResourceId,
             *const ContextDataV2,
+        ) -> PluginStatus,
+    >,
+    pub release: Option<unsafe extern "C" fn(*mut c_void, PluginToken, ResourceId) -> PluginStatus>,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ActivityApiV2 {
+    pub prefix: TablePrefix,
+    pub create: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            PluginToken,
+            *const ActivitySpecV2,
+            *mut ResourceId,
+        ) -> PluginStatus,
+    >,
+    pub update: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            PluginToken,
+            ResourceId,
+            *const ActivitySpecV2,
         ) -> PluginStatus,
     >,
     pub release: Option<unsafe extern "C" fn(*mut c_void, PluginToken, ResourceId) -> PluginStatus>,

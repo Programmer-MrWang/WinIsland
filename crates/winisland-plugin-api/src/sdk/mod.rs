@@ -1,7 +1,9 @@
+mod activity;
 mod draw;
 mod extensions;
 mod resources;
 mod system;
+pub use activity::*;
 pub use extensions::*;
 pub use system::*;
 

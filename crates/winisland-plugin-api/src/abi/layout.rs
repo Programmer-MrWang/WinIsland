@@ -10,9 +10,10 @@ use crate::types::v2::settings::{
 };
 use crate::types::v2::widget::WidgetSpecV2;
 use crate::types::v2::{
-    ByteSlice, CommandInfoV2, CommandSpecV2, EventSubscriptionV2, ImageId, InputRegionV2,
-    IslandStateV2, LocalDateTimeV2, LunarDateV2, MediaSessionV2, PluginEventV2, PluginToken,
-    ResourceId, SurfaceSpecV2, TextMetricsV2, TextStyleV2, TimerSpecV2, Utf8Slice, WidgetId,
+    ActivitySpecV2, ByteSlice, CommandInfoV2, CommandSpecV2, EventSubscriptionV2, ImageId,
+    InputRegionV2, IslandStateV2, LocalDateTimeV2, LunarDateV2, MediaSessionV2, PluginEventV2,
+    PluginToken, ResourceId, SurfaceSpecV2, TextMetricsV2, TextStyleV2, TimerSpecV2, Utf8Slice,
+    WidgetId,
 };
 
 macro_rules! assert_layout {
@@ -29,6 +30,29 @@ const _: () = {
     assert!(size_of::<PluginStatus>() == 4);
     assert!(align_of::<PluginStatus>() == 4);
 };
+
+assert_layout!(
+    ActivityApiV2,
+    40,
+    8,
+    prefix = 0,
+    create = 16,
+    update = 24,
+    release = 32
+);
+assert_layout!(
+    ActivitySpecV2,
+    40,
+    8,
+    struct_size = 0,
+    flags = 4,
+    priority = 8,
+    timeout_ms = 12,
+    compact_surface = 16,
+    expanded_page = 24,
+    preferred_width = 32,
+    preferred_height = 36
+);
 
 assert_layout!(
     SystemApiV2,

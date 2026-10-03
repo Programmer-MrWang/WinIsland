@@ -1,3 +1,5 @@
+mod activity;
+pub use activity::*;
 pub mod context;
 pub mod i18n;
 pub mod lyrics;
