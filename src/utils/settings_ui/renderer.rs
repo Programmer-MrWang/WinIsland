@@ -19,7 +19,6 @@ use super::items::SettingsItem;
 pub(crate) use crate::utils::color::settings_color;
 pub(crate) use controls::{SettingsPainter, ellipsize_text};
 pub use items::{content_height, draw_items};
-pub(crate) use widget_preview::{draw_delete_button, draw_library_tile_surface};
 
 pub struct ActiveStepperValue<'a> {
     pub rect: Rect,

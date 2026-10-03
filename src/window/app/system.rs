@@ -557,8 +557,10 @@ impl App {
                     let old_position_x_offset = self.config.position_x_offset;
                     let old_position_y_offset = self.config.position_y_offset;
                     let old_monitor_index = self.config.monitor_index;
-                    let page_order_changed =
-                        self.config.expanded_page_order != current_config.expanded_page_order;
+                    let page_order_changed = self.config.expanded_page_order
+                        != current_config.expanded_page_order
+                        || self.config.hidden_expanded_pages
+                            != current_config.hidden_expanded_pages;
 
                     log::info!("Config changed, reloaded");
                     self.config = current_config;
