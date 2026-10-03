@@ -2,6 +2,23 @@
 
 此更新日志列出 `winisland-plugin-api` 各版本的变更。网站将此文件显示为插件 API 更新日志。
 
+## 0.11.0 - 2026 年 10 月 3 日
+
+新增：
+
+- `ActivityApiV2`、`IFACE_ACTIVITY` 和 `CAP_ACTIVITY`，用于创建、更新和释放活动，可声明优先级、超时、紧凑模式期望尺寸、插件自己的紧凑 surface，以及可选的展开页
+- `ActivitySpecV2`、`ACTIVITY_ENABLED` 和 `ACTIVITY_KEEP_VISIBLE`；有效活动可阻止灵动岛因无活动而自动隐藏
+- `SURFACE_COMPACT_MAIN`，让活动在主紧凑区域绘制内容，由宿主与音乐、计时器及旧文字状态统一选择
+- Rust SDK 的 `Host::activities()`、`Activities::create` 和 `Activity::{id, update}`；活动句柄在销毁时释放资源，并提供下载进度示例
+- 活动服务表和数据结构的编译期 ABI 布局断言，以及布局工具输出
+- 文档站的中英文 System、Activity 和绘制 SDK 参考，补齐之前未逐项说明的绘制辅助方法和命令
+
+变更：
+
+- 宿主按优先级、更新时间和资源 ID 统一选择原生活动与插件活动；旧 Context 资源也接入同一机制
+- 活动选择、期望尺寸、点击展开和无活动自动隐藏统一读取活动声明；活动到期或紧凑 surface 不可用时停止参与展示，但活动句柄仍需释放
+- 保留 ABI v2 及现有入口、描述符、服务表和绘制协议布局；新增活动能力和 surface 类型需要实现这些扩展的宿主
+
 ## 0.10.0 - 2026 年 10 月 2 日
 
 新增：

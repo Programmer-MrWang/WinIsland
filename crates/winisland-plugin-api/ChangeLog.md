@@ -2,6 +2,23 @@
 
 This changelog lists `winisland-plugin-api` versions. The website displays this file as its plugin API update log.
 
+## 0.11.0 - Oct 3, 2026
+
+Added:
+
+- `ActivityApiV2`, `IFACE_ACTIVITY`, and `CAP_ACTIVITY` to create, update, and release activities with priority, timeout, preferred compact dimensions, an owned compact surface, and an optional expanded page
+- `ActivitySpecV2`, `ACTIVITY_ENABLED`, and `ACTIVITY_KEEP_VISIBLE`; active activities can keep the island visible during inactivity auto-hide
+- `SURFACE_COMPACT_MAIN` for activity-owned content in the main compact region, selected by the host alongside music, timers, and legacy text contexts
+- Rust SDK `Host::activities()`, `Activities::create`, and owned `Activity::{id, update}` handles that release their resources on drop, plus a download-progress example
+- Compile-time ABI layout assertions and layout-tool output for the activity table and specification
+- English and Chinese website references for System, Activity, and the drawing SDK, including the previously undocumented drawing helpers and commands
+
+Changed:
+
+- The host selects native and plugin activities together by priority, update time, and resource ID; legacy Context resources enter the same selection mechanism
+- Activity selection, preferred sizing, click-to-open navigation, and inactivity auto-hide share activity declarations; expired activities and unavailable compact surfaces stop participating without freeing the activity handle
+- Kept ABI v2 and all existing entry-point, descriptor, service-table, and drawing-protocol layouts; the new activity capability and surface kind require a host implementing these additions
+
 ## 0.10.0 - Oct 2, 2026
 
 Added:
