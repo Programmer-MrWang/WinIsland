@@ -10,6 +10,7 @@ struct WindowsTray {
     tray: TrayIcon,
     toggle: MenuItem,
     settings: MenuItem,
+    guide: MenuItem,
     restart: MenuItem,
     exit: MenuItem,
     theme: TrayTheme,
@@ -35,10 +36,12 @@ pub(super) fn install(theme: TrayTheme, labels: TrayLabels) -> Result<(), Platfo
     let menu = Menu::new();
     let toggle = MenuItem::new(&labels.toggle, true, None);
     let settings = MenuItem::new(&labels.settings, true, None);
+    let guide = MenuItem::new(&labels.guide, true, None);
     let restart = MenuItem::new(&labels.restart, true, None);
     let exit = MenuItem::new(&labels.exit, true, None);
     menu.append(&toggle).map_err(PlatformError::backend)?;
     menu.append(&settings).map_err(PlatformError::backend)?;
+    menu.append(&guide).map_err(PlatformError::backend)?;
     menu.append(&restart).map_err(PlatformError::backend)?;
     menu.append(&exit).map_err(PlatformError::backend)?;
     let tray = TrayIconBuilder::new()
@@ -54,6 +57,7 @@ pub(super) fn install(theme: TrayTheme, labels: TrayLabels) -> Result<(), Platfo
             tray,
             toggle,
             settings,
+            guide,
             restart,
             exit,
             theme,
@@ -74,6 +78,7 @@ pub(super) fn update(theme: TrayTheme, labels: TrayLabels) -> Result<(), Platfor
         }
         tray.toggle.set_text(&labels.toggle);
         tray.settings.set_text(&labels.settings);
+        tray.guide.set_text(&labels.guide);
         tray.restart.set_text(&labels.restart);
         tray.exit.set_text(&labels.exit);
         Ok(())
@@ -93,6 +98,8 @@ pub(super) fn poll_events() -> Vec<TrayAction> {
             Some(TrayAction::ToggleVisibility)
         } else if event.id == tray.settings.id() {
             Some(TrayAction::OpenSettings)
+        } else if event.id == tray.guide.id() {
+            Some(TrayAction::ShowGuide)
         } else if event.id == tray.restart.id() {
             Some(TrayAction::Restart)
         } else if event.id == tray.exit.id() {

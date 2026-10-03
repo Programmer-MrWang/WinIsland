@@ -53,6 +53,9 @@ impl App {
             Some(crate::window::settings::PluginSettingsRequest::Install(path)) => {
                 self.install_zip_drop(&path);
             }
+            Some(crate::window::settings::PluginSettingsRequest::ShowGuide) => {
+                self.open_guide();
+            }
             Some(crate::window::settings::PluginSettingsRequest::LoadMarketplace) => {
                 self.load_plugin_marketplace();
             }
@@ -237,6 +240,11 @@ impl App {
                     self.next_frame_deadline = now + retry_interval;
                     return;
                 }
+                if let Some(guide) = self.guide.as_mut()
+                    && let Err(error) = guide.recreate_renderer_target(&mut renderer)
+                {
+                    log::warn!("Guide renderer recovery failed: {error}");
+                }
                 self.renderer = Some(renderer);
                 self.create_host_backdrop(window_ref);
                 self.renderer_retry_at = None;
@@ -399,6 +407,49 @@ impl App {
         log::info!("Settings window opened in main process");
     }
 
+    pub(super) fn open_guide(&mut self) {
+        if let Some(guide) = &self.guide {
+            guide.bring_to_front();
+            return;
+        }
+        let target_monitor = self
+            .window
+            .as_ref()
+            .and_then(|window| Self::get_target_monitor(window, self.config.monitor_index));
+        let Some(renderer) = self.renderer.as_mut() else {
+            log::error!("Cannot open guide without the shared D3D12 renderer");
+            return;
+        };
+        let mut guide = crate::window::guide::GuideApp::new(self.config.settings_theme.clone());
+        if let Err(error) = guide.create_window(renderer, target_monitor) {
+            log::error!("Failed to open guide window: {error}");
+            if let Some(target) = guide.close() {
+                renderer.remove_target(target);
+            }
+            return;
+        }
+        self.guide = Some(guide);
+        log::info!("Beginner guide opened");
+    }
+
+    pub(super) fn close_guide(&mut self) {
+        let Some(mut guide) = self.guide.take() else {
+            return;
+        };
+        if let Some(target) = guide.close()
+            && let Some(renderer) = self.renderer.as_mut()
+        {
+            renderer.remove_target(target);
+        }
+        if !self.config.onboarding_completed {
+            self.config.onboarding_completed = true;
+            let mut config = load_config();
+            config.onboarding_completed = true;
+            crate::core::persistence::save_config(&config);
+        }
+        log::info!("Beginner guide closed");
+    }
+
     pub(super) fn close_settings(&mut self) {
         if !self.tray_installed && !self.visible {
             self.visible = true;
@@ -461,6 +512,10 @@ impl App {
                 TrayAction::OpenSettings => {
                     log::info!("Tray: opening settings");
                     self.open_settings();
+                }
+                TrayAction::ShowGuide => {
+                    log::info!("Tray: opening beginner guide");
+                    self.open_guide();
                 }
                 TrayAction::Restart => {
                     log::info!("Tray: restarting application");

@@ -144,6 +144,7 @@ pub struct SettingsSpec {
     pub title: &'static str,
     pub logical_size: LogicalWindowSize,
     pub monitor: Option<MonitorId>,
+    pub resizable: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -262,6 +263,7 @@ pub enum TrayAction {
     Plugin(u64),
     ToggleVisibility,
     OpenSettings,
+    ShowGuide,
     Restart,
     Exit,
 }
@@ -301,6 +303,7 @@ pub struct PluginCommand {
 pub struct TrayLabels {
     pub toggle: String,
     pub settings: String,
+    pub guide: String,
     pub restart: String,
     pub exit: String,
     pub tooltip: String,

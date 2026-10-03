@@ -544,6 +544,31 @@ impl AppHandler for App {
             return;
         };
         if self
+            .guide
+            .as_ref()
+            .and_then(crate::window::guide::GuideApp::window_id)
+            == Some(id)
+        {
+            if let (Some(guide), Some(renderer)) = (self.guide.as_mut(), self.renderer.as_mut()) {
+                guide.handle_window_event(event, renderer);
+            }
+            if let Some(error) = self
+                .renderer
+                .as_mut()
+                .and_then(winisland_render::Renderer::take_failure)
+            {
+                self.invalidate_renderer(&error, Instant::now());
+            }
+            if self
+                .guide
+                .as_ref()
+                .is_some_and(crate::window::guide::GuideApp::close_requested)
+            {
+                self.close_guide();
+            }
+            return;
+        }
+        if self
             .settings
             .as_ref()
             .and_then(super::super::settings::SettingsApp::window_id)
@@ -591,6 +616,13 @@ impl AppHandler for App {
         {
             deadline = deadline.min(settings_deadline);
         }
+        if let Some(guide_deadline) = self
+            .guide
+            .as_mut()
+            .and_then(crate::window::guide::GuideApp::update)
+        {
+            deadline = deadline.min(guide_deadline);
+        }
         self.handle_plugin_settings_request();
         self.window.map(|_| deadline)
     }
@@ -602,6 +634,7 @@ impl AppHandler for App {
             host.runtime().extensions.clear_presentations();
         }
         self.close_settings();
+        self.close_guide();
         if let Some(window_ref) = self.window.take() {
             window().release_host_backdrop(window_ref.id());
             self.host_backdrop = false;
