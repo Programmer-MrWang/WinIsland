@@ -133,6 +133,9 @@ impl App {
             }
             Self::enforce_overlay_window(&window_ref);
             window_ref.set_visible(true);
+            if !self.config.onboarding_completed {
+                self.open_guide();
+            }
             window_ref.request_redraw();
         }
     }

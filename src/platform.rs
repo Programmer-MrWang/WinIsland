@@ -185,6 +185,7 @@ pub(crate) fn tray_labels(visible: bool) -> TrayLabels {
     TrayLabels {
         toggle: tr(if visible { "tray_hide" } else { "tray_show" }),
         settings: tr("tray_settings"),
+        guide: tr("tray_guide"),
         restart: tr("tray_restart"),
         exit: tr("tray_exit"),
         tooltip: winisland_core::config::WINDOW_TITLE.to_string(),

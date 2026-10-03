@@ -15,6 +15,10 @@ pub use widget_layout::*;
 pub use widgets::*;
 
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+fn existing_config_completed_onboarding() -> bool {
+    true
+}
 pub const APP_AUTHOR: &str = "Eatgrapes";
 pub const APP_HOMEPAGE: &str = "https://github.com/WinIslandProject/WinIsland";
 pub const WINDOW_TITLE: &str = "WinIsland";
@@ -51,6 +55,8 @@ pub struct AppConfig {
     #[setting(toggle, label = "smtc_control")]
     pub smtc_enabled: bool,
     pub music_notice_acknowledged: bool,
+    #[serde(default = "existing_config_completed_onboarding")]
+    pub onboarding_completed: bool,
     pub smtc_apps: Vec<String>,
     pub smtc_known_apps: Vec<String>,
     #[educe(Default = true)]

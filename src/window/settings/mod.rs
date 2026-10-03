@@ -166,6 +166,7 @@ pub(crate) enum PluginSettingsRequest {
     SetEnabled { id: String, enabled: bool },
     Uninstall { id: String },
     Restart,
+    ShowGuide,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -528,6 +529,7 @@ impl SettingsApp {
                 title: "WinIsland Settings",
                 logical_size: LogicalWindowSize::new(WIN_W as f64, WIN_H as f64),
                 monitor: self.target_monitor.as_ref().map(MonitorRef::id),
+                resizable: true,
             })
             .expect("Settings window creation failed");
         let window_ref = WindowRef(id);

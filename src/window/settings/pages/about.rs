@@ -30,6 +30,7 @@ fn app_icon() -> Image {
 #[derive(Clone, Copy)]
 enum AboutAction {
     Homepage,
+    Guide,
 }
 
 impl SettingsApp {
@@ -42,6 +43,8 @@ impl SettingsApp {
         page.center_text(format!("Version {APP_VERSION}"), 14.0, theme.text_sec);
         page.spacer(10.0);
         page.center_link(tr("visit_homepage"), theme.accent, AboutAction::Homepage);
+        page.spacer(4.0);
+        page.center_link(tr("open_beginner_guide"), theme.accent, AboutAction::Guide);
         page
     }
 
@@ -49,15 +52,22 @@ impl SettingsApp {
         self.build_about_page().into_items()
     }
 
-    pub(crate) fn handle_about_click(&self, input: PageInput) {
+    pub(crate) fn handle_about_click(&mut self, input: PageInput) {
         let page = self.build_about_page();
         let result = input.hit_test(&page);
-        if matches!(
-            (page.action(&result), result),
-            (Some(AboutAction::Homepage), ClickResult::CenterLink(_))
-        ) && let Err(error) = crate::platform::shell().open_url(APP_HOMEPAGE)
-        {
-            log::warn!("Could not open homepage: {error}");
+        if !matches!(result, ClickResult::CenterLink(_)) {
+            return;
+        }
+        match page.action(&result).copied() {
+            Some(AboutAction::Homepage) => {
+                if let Err(error) = crate::platform::shell().open_url(APP_HOMEPAGE) {
+                    log::warn!("Could not open homepage: {error}");
+                }
+            }
+            Some(AboutAction::Guide) => {
+                self.plugin_request = Some(super::super::PluginSettingsRequest::ShowGuide);
+            }
+            None => {}
         }
     }
 }

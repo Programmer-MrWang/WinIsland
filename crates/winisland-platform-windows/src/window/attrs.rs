@@ -42,7 +42,7 @@ pub(super) fn settings_attributes(
     let attrs = Window::default_attributes()
         .with_title(spec.title)
         .with_inner_size(logical_size)
-        .with_resizable(true)
+        .with_resizable(spec.resizable)
         .with_enabled_buttons(WindowButtons::CLOSE | WindowButtons::MINIMIZE)
         .with_decorations(false)
         .with_transparent(true)
