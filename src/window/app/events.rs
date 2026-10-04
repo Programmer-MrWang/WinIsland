@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use winisland_platform::{
     AppHandler, BackdropShape, HostBackdropParams, InputState, MouseButton, PlatformEvent, Theme,
-    TouchPhase, WindowId, WindowPosition,
+    TouchPhase, WakeDeadline, WindowId, WindowPosition,
 };
 
 use crate::platform::window;
@@ -606,15 +606,17 @@ impl AppHandler for App {
         self.on_window_event(id, event);
     }
 
-    fn on_about_to_wait(&mut self) -> Option<Instant> {
+    fn on_about_to_wait(&mut self) -> Option<WakeDeadline> {
         self.on_about_to_wait();
         let mut deadline = self.next_frame_deadline;
+        let mut precise = self.precise_frame_pacing;
         if let Some(settings_deadline) = self
             .settings
             .as_mut()
             .and_then(super::super::settings::SettingsApp::update)
         {
             deadline = deadline.min(settings_deadline);
+            precise = true;
         }
         if let Some(guide_deadline) = self
             .guide
@@ -622,9 +624,10 @@ impl AppHandler for App {
             .and_then(crate::window::guide::GuideApp::update)
         {
             deadline = deadline.min(guide_deadline);
+            precise = true;
         }
         self.handle_plugin_settings_request();
-        self.window.map(|_| deadline)
+        self.window.map(|_| WakeDeadline { deadline, precise })
     }
 
     fn on_exit(&mut self) {

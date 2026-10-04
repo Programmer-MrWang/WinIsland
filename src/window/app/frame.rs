@@ -102,6 +102,7 @@ impl App {
             self.compact_overlay.finish_brightness_drag();
             self.audio.set_gate_override(false);
             self.next_frame_deadline = now + HIDDEN_FRAME_INTERVAL;
+            self.precise_frame_pacing = false;
             return;
         }
         let (px, py) = if self.touch_id.is_some() {
@@ -1082,6 +1083,11 @@ impl App {
         {
             log::warn!("Working set trim failed: {error}");
         }
+        self.precise_frame_pacing = transition_active
+            || playback_active
+            || dynamic_effect_active
+            || interactive_active
+            || resource_usage_active;
         let frame_interval = if transition_active {
             self.display_frame_interval
         } else if playback_active || dynamic_effect_active {

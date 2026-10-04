@@ -21,7 +21,7 @@ pub use caps::Capabilities;
 pub use device_activity::{DeviceActivity, DeviceActivityFeed, DeviceActivityProvider};
 pub use display::{BrightnessFeed, DisplayProvider};
 pub use error::PlatformError;
-pub use events::{AppHandler, PlatformEvent};
+pub use events::{AppHandler, PlatformEvent, WakeDeadline};
 pub use input::InputHooks;
 pub use media::{MediaContext, MediaProvider, MediaSessionHandle, ThumbnailError};
 pub use metrics::SystemMetrics;

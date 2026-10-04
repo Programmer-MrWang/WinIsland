@@ -114,6 +114,12 @@ pub enum PlatformEvent {
     Exiting,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WakeDeadline {
+    pub deadline: Instant,
+    pub precise: bool,
+}
+
 /// Receives normalized events on the event-loop thread while `WindowSystem::run` is active.
 ///
 /// Callbacks are synchronous and may call window methods, but are not invoked recursively by the
@@ -123,7 +129,7 @@ pub trait AppHandler {
     /// Handles one owned event before the next loop phase; no result is returned.
     fn on_event(&mut self, event: PlatformEvent);
     /// Returns the next wake deadline, or `None` to wait indefinitely for an event.
-    fn on_about_to_wait(&mut self) -> Option<Instant>;
+    fn on_about_to_wait(&mut self) -> Option<WakeDeadline>;
     /// Performs final cleanup once after `Exiting` and before `run` returns.
     fn on_exit(&mut self);
 }

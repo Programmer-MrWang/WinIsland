@@ -1,8 +1,12 @@
 use std::cell::{Cell, RefCell};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
-use windows::Win32::UI::WindowsAndMessaging::{MSG, WM_DWMCOMPOSITIONCHANGED};
+use windows::Win32::UI::WindowsAndMessaging::{
+    KillTimer, MSG, SetCoalescableTimer, TIMERV_DEFAULT_COALESCING, USER_TIMER_MAXIMUM,
+    USER_TIMER_MINIMUM, WM_DWMCOMPOSITIONCHANGED, WM_TIMER,
+};
 use winisland_platform::{
     AppHandler, DisplayProvider, InputState, Key, MouseButton, MouseWheelDelta, PlatformError,
     PlatformEvent, Theme, TouchPhase, WindowId, WindowPoint, WindowPosition, WindowSize,
@@ -27,6 +31,7 @@ static COMPOSITION_CHANGED: AtomicBool = AtomicBool::new(false);
 thread_local! {
     static ACTIVE_EVENT_LOOP: Cell<*const ActiveEventLoop> = const { Cell::new(std::ptr::null()) };
     static DPI_WRITER: RefCell<Option<(WindowId, InnerSizeWriter)>> = const { RefCell::new(None) };
+    static COALESCED_TIMER_ID: Cell<usize> = const { Cell::new(0) };
 }
 
 pub fn wake() {
@@ -44,6 +49,12 @@ pub(super) fn run(handler: &mut dyn AppHandler) -> Result<(), PlatformError> {
         if !message.is_null() {
             // SAFETY: winit supplies a valid MSG pointer for this synchronous callback.
             let message = unsafe { &*message.cast::<MSG>() };
+            if message.message == WM_TIMER
+                && message.hwnd.is_invalid()
+                && COALESCED_TIMER_ID.with(|id| id.get() != 0 && id.get() == message.wParam.0)
+            {
+                return true;
+            }
             if message.message == windows::Win32::UI::WindowsAndMessaging::WM_HOTKEY {
                 crate::shell::plugin_commands::pressed(message.wParam.0);
             }
@@ -57,7 +68,10 @@ pub(super) fn run(handler: &mut dyn AppHandler) -> Result<(), PlatformError> {
     let event_loop = builder.build().map_err(PlatformError::backend)?;
     let _ = PROXY.set(event_loop.create_proxy());
     event_loop
-        .run_app(&mut EventAdapter { handler })
+        .run_app(&mut EventAdapter {
+            handler,
+            idle_timer: CoalescedTimer::default(),
+        })
         .map_err(PlatformError::backend)
 }
 
@@ -128,6 +142,59 @@ fn scope_dpi_writer<T>(id: WindowId, writer: InnerSizeWriter, f: impl FnOnce() -
 
 struct EventAdapter<'a> {
     handler: &'a mut dyn AppHandler,
+    idle_timer: CoalescedTimer,
+}
+
+#[derive(Default)]
+struct CoalescedTimer {
+    id: usize,
+    deadline: Option<Instant>,
+    failed: bool,
+}
+
+impl CoalescedTimer {
+    fn arm(&mut self, deadline: Instant) -> bool {
+        if self.failed {
+            return false;
+        }
+        if self.id != 0 && self.deadline == Some(deadline) {
+            return true;
+        }
+        self.cancel();
+        let timeout = deadline
+            .saturating_duration_since(Instant::now())
+            .as_nanos()
+            .div_ceil(1_000_000)
+            .clamp(USER_TIMER_MINIMUM as u128, USER_TIMER_MAXIMUM as u128)
+            as u32;
+        // SAFETY: The timer belongs to this event-loop thread and is handled by its message hook.
+        self.id = unsafe { SetCoalescableTimer(None, 0, timeout, None, TIMERV_DEFAULT_COALESCING) };
+        if self.id == 0 {
+            let error = windows::core::Error::from_thread();
+            self.failed = true;
+            log::warn!("Coalesced event-loop timer is unavailable: {error}");
+            return false;
+        }
+        self.deadline = Some(deadline);
+        COALESCED_TIMER_ID.with(|id| id.set(self.id));
+        true
+    }
+
+    fn cancel(&mut self) {
+        if self.id != 0 {
+            COALESCED_TIMER_ID.with(|id| id.set(0));
+            // SAFETY: The ID is owned by this timer and is released on its creating thread.
+            let _ = unsafe { KillTimer(None, self.id) };
+            self.id = 0;
+        }
+        self.deadline = None;
+    }
+}
+
+impl Drop for CoalescedTimer {
+    fn drop(&mut self) {
+        self.cancel();
+    }
 }
 
 impl EventAdapter<'_> {
@@ -181,14 +248,28 @@ impl ApplicationHandler<()> for EventAdapter<'_> {
         scope_active_event_loop(event_loop, || {
             self.composition_changed();
             let control_flow = match self.handler.on_about_to_wait() {
-                Some(deadline) => ControlFlow::WaitUntil(deadline),
-                None => ControlFlow::Wait,
+                Some(wake) if wake.deadline <= Instant::now() => {
+                    self.idle_timer.cancel();
+                    ControlFlow::Poll
+                }
+                Some(wake) if !wake.precise && self.idle_timer.arm(wake.deadline) => {
+                    ControlFlow::Wait
+                }
+                Some(wake) => {
+                    self.idle_timer.cancel();
+                    ControlFlow::WaitUntil(wake.deadline)
+                }
+                None => {
+                    self.idle_timer.cancel();
+                    ControlFlow::Wait
+                }
             };
             event_loop.set_control_flow(control_flow);
         });
     }
 
     fn exiting(&mut self, event_loop: &ActiveEventLoop) {
+        self.idle_timer.cancel();
         scope_active_event_loop(event_loop, || {
             self.handler.on_event(PlatformEvent::Exiting);
             self.handler.on_exit();
