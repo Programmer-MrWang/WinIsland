@@ -41,6 +41,12 @@ impl SettingsApp {
         }
         page.group_end();
 
+        page.section(tr("section_track_text"));
+        page.group_start();
+        page.setting(&self.config, AppConfigField::MusicTextYOffset, true);
+        page.setting(&self.config, AppConfigField::MusicTextLineSpacing, true);
+        page.group_end();
+
         if self.config.smtc_enabled && media_available {
             page.section(tr("section_lyrics"));
             page.group_start();

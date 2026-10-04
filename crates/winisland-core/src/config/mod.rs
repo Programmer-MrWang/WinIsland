@@ -123,6 +123,11 @@ pub struct AppConfig {
     pub monitor_index: i32,
     #[setting(number(min = 0.0, max = 30.0, step = 1.0))]
     pub font_size: f32,
+    #[setting(number(min = -32.0, max = 32.0, step = 1.0))]
+    pub music_text_y_offset: f32,
+    #[educe(Default = 22.0)]
+    #[setting(number(min = 8.0, max = 64.0, step = 1.0))]
+    pub music_text_line_spacing: f32,
     #[educe(Default = "system")]
     #[setting(choice("system" => "theme_system", "light" => "theme_light", "dark" => "theme_dark"))]
     pub settings_theme: String,

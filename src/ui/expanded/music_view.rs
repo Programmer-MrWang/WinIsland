@@ -199,6 +199,8 @@ pub struct DrawMusicPageParams<'a> {
     pub viz_h_scale: f32,
     pub use_blur: bool,
     pub font_size: f32,
+    pub music_text_y_offset: f32,
+    pub music_text_line_spacing: f32,
     pub dt: f32,
     pub text_color: Rgba,
     pub text_color_sec: Rgba,
@@ -220,6 +222,8 @@ pub fn draw_music_page(params: DrawMusicPageParams<'_>) {
         viz_h_scale,
         use_blur,
         font_size,
+        music_text_y_offset,
+        music_text_line_spacing,
         dt,
         text_color,
         text_color_sec,
@@ -255,7 +259,8 @@ pub fn draw_music_page(params: DrawMusicPageParams<'_>) {
         music_active,
         text_x,
         max_text_w,
-        title_y,
+        title_y: title_y + music_text_y_offset * scale,
+        line_spacing: music_text_line_spacing,
         alpha,
         font_size,
         scale,
@@ -683,6 +688,7 @@ struct TrackTextParams<'a> {
     text_x: f32,
     max_text_w: f32,
     title_y: f32,
+    line_spacing: f32,
     alpha: u8,
     font_size: f32,
     scale: f32,
@@ -698,6 +704,7 @@ fn draw_track_text(params: TrackTextParams) {
         text_x,
         max_text_w,
         title_y,
+        line_spacing,
         alpha,
         font_size,
         scale,
@@ -740,7 +747,7 @@ fn draw_track_text(params: TrackTextParams) {
         });
     });
 
-    let artist_y = title_y + 22.0 * scale;
+    let artist_y = title_y + line_spacing * scale;
     let artist_font_size = if font_size > 0.0 {
         font_size * scale
     } else {

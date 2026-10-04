@@ -475,6 +475,10 @@ impl App {
                                             host_backdrop,
                                             use_blur: self.config.motion_blur,
                                             font_size: self.config.font_size,
+                                            music_text_y_offset: self.config.music_text_y_offset,
+                                            music_text_line_spacing: self
+                                                .config
+                                                .music_text_line_spacing,
                                             dt,
                                             expanded_width: self.config.expanded_width,
                                             expanded_height: self.config.expanded_height,

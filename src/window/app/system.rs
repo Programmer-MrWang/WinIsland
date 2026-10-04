@@ -564,6 +564,7 @@ impl App {
 
                     log::info!("Config changed, reloaded");
                     self.config = current_config;
+                    window_ref.request_redraw();
                     if page_order_changed {
                         self.snap_to_current_page();
                     }

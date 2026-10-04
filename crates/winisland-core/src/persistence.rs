@@ -134,6 +134,16 @@ pub fn load_config_at(path: &Path) -> AppConfig {
     } else {
         AppConfig::default().lyrics_side_gap
     };
+    config.music_text_y_offset = if config.music_text_y_offset.is_finite() {
+        config.music_text_y_offset.clamp(-32.0, 32.0)
+    } else {
+        AppConfig::default().music_text_y_offset
+    };
+    config.music_text_line_spacing = if config.music_text_line_spacing.is_finite() {
+        config.music_text_line_spacing.clamp(8.0, 64.0)
+    } else {
+        AppConfig::default().music_text_line_spacing
+    };
     config.expanded_width = config.expanded_width.clamp(200.0, 2000.0);
     config.expanded_height = config.expanded_height.clamp(100.0, 1000.0);
     let resource_span =
