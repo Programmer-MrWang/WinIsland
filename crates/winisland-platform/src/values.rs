@@ -153,9 +153,11 @@ pub struct OverlayStyles {
     pub topmost: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum HitRegion {
     WholeWindow(bool),
+    Rect(Rect),
+    Path(std::sync::Arc<[ClipSegment]>),
 }
 
 #[derive(Clone, Debug)]

@@ -152,12 +152,19 @@ fn dots(rect: Rect, count: usize, position: f32, scale: f32) -> Vec<(Rect, f32)>
 }
 
 pub fn contains(island: Rect, count: usize, scale: f32, above: bool, point: Point) -> bool {
+    hit_regions(island, count, scale, above)
+        .into_iter()
+        .flatten()
+        .any(|rect| rect.contains(point))
+}
+
+pub fn hit_regions(island: Rect, count: usize, scale: f32, above: bool) -> [Option<Rect>; 2] {
     let layout = layout(island, count, scale, above);
     let slop = -HIT_SLOP * scale;
-    layout.close.inset(slop).contains(point)
-        || layout
-            .bar
-            .is_some_and(|bar| bar.inset(slop).contains(point))
+    [
+        Some(layout.close.inset(slop)),
+        layout.bar.map(|bar| bar.inset(slop)),
+    ]
 }
 
 pub fn hit_test(

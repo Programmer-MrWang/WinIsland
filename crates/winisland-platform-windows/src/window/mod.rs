@@ -33,6 +33,7 @@ struct WindowRecord {
     plugin_capture: bool,
     plugin_keyboard: bool,
     host_backdrop: Option<Rc<HostBackdrop>>,
+    input: Option<Rc<hit_test::InputWindow>>,
     window: Arc<Window>,
     backdrop: Option<Arc<Window>>,
 }
@@ -71,11 +72,17 @@ fn create_window(
         .map_err(PlatformError::backend)
 }
 
-fn register_window(window: Arc<Window>, backdrop: Option<Arc<Window>>) -> WindowId {
-    if let Some(hwnd) = window_hwnd(&window) {
-        // SAFETY: The live window was created on this event-loop thread and owns hwnd.
-        if let Err(error) = unsafe { RegisterTouchWindow(HWND(hwnd as *mut _), TWF_WANTPALM) } {
-            log::warn!("Touch input registration failed: {error}");
+fn register_window(
+    window: Arc<Window>,
+    backdrop: Option<Arc<Window>>,
+    input: Option<Rc<hit_test::InputWindow>>,
+) -> WindowId {
+    for touch_window in std::iter::once(&window).chain(input.as_ref().map(|input| &input.window)) {
+        if let Some(hwnd) = window_hwnd(touch_window) {
+            // SAFETY: The live window was created on this event-loop thread and owns hwnd.
+            if let Err(error) = unsafe { RegisterTouchWindow(HWND(hwnd as *mut _), TWF_WANTPALM) } {
+                log::warn!("Touch input registration failed: {error}");
+            }
         }
     }
     let id = WindowId(u64::from(window.id()));
@@ -83,6 +90,7 @@ fn register_window(window: Arc<Window>, backdrop: Option<Arc<Window>>) -> Window
         plugin_capture: false,
         plugin_keyboard: false,
         host_backdrop: None,
+        input,
         window,
         backdrop,
     };
@@ -90,6 +98,40 @@ fn register_window(window: Arc<Window>, backdrop: Option<Arc<Window>>) -> Window
         windows.borrow_mut().insert(id, record);
     });
     id
+}
+
+fn get_input_window(id: WindowId) -> Option<Arc<Window>> {
+    WINDOWS.with(|windows| {
+        windows.borrow().get(&id).map(|record| {
+            record
+                .input
+                .as_ref()
+                .map_or_else(|| record.window.clone(), |input| input.window.clone())
+        })
+    })
+}
+
+pub(super) fn input_owner(id: WindowId) -> Option<WindowId> {
+    WINDOWS.with(|windows| {
+        windows.borrow().iter().find_map(|(owner, record)| {
+            record
+                .input
+                .as_ref()
+                .filter(|input| WindowId(u64::from(input.window.id())) == id)
+                .map(|_| *owner)
+        })
+    })
+}
+
+pub(super) fn sync_input_window(id: WindowId) {
+    let pair = WINDOWS.with(|windows| {
+        let windows = windows.borrow();
+        let record = windows.get(&id)?;
+        Some((record.window.clone(), record.input.clone()?))
+    });
+    if let Some((window, input)) = pair {
+        input.sync(&window);
+    }
 }
 
 fn monitor_id(monitor: &MonitorHandle) -> MonitorId {
@@ -215,13 +257,17 @@ impl WindowSystem for WindowsWindowSystem {
         let state = WINDOWS.with(|windows| {
             let mut windows = windows.borrow_mut();
             let record = windows.get_mut(&id)?;
-            let hwnd = window_hwnd(&record.window).map(|hwnd| HWND(hwnd as *mut _))?;
+            let input_window = record
+                .input
+                .as_ref()
+                .map_or(&record.window, |input| &input.window);
+            let hwnd = window_hwnd(input_window).map(|hwnd| HWND(hwnd as *mut _))?;
             let changed_capture = record.plugin_capture != capture;
             let changed_keyboard = record.plugin_keyboard != keyboard;
             record.plugin_capture = capture;
             record.plugin_keyboard = keyboard;
             Some((
-                record.window.clone(),
+                input_window.clone(),
                 hwnd,
                 changed_capture,
                 changed_keyboard,
@@ -266,7 +312,18 @@ impl WindowSystem for WindowsWindowSystem {
                 .ok_or(PlatformError::Unavailable("Win32 backdrop window handle"))?
                 as isize;
             let window = create_window(event_loop, attrs::overlay_attributes(spec, owner))?;
-            Ok(register_window(window, Some(backdrop)))
+            let _ = window.set_cursor_hittest(false);
+            let hwnd = window_hwnd(&window)
+                .ok_or(PlatformError::Unavailable("Win32 overlay window handle"))?;
+            let input = Rc::new(hit_test::InputWindow::new(create_window(
+                event_loop,
+                attrs::input_attributes(spec, hwnd as isize),
+            )?)?);
+            if let Some(hwnd) = window_hwnd(&input.window) {
+                styles::enforce_overlay_window_styles(HWND(hwnd as *mut _), true);
+            }
+            input.sync(&window);
+            Ok(register_window(window, Some(backdrop), Some(input)))
         })
         .ok_or(PlatformError::Unavailable("active event loop"))?
     }
@@ -281,6 +338,7 @@ impl WindowSystem for WindowsWindowSystem {
             let attributes = attrs::settings_attributes(spec, monitor.as_ref());
             Ok(register_window(
                 create_window(event_loop, attributes)?,
+                None,
                 None,
             ))
         })
@@ -298,6 +356,7 @@ impl WindowSystem for WindowsWindowSystem {
 
     fn set_visible(&self, id: WindowId, visible: bool) {
         let _ = with_window(id, |window| window.set_visible(visible));
+        sync_input_window(id);
     }
 
     fn is_visible(&self, id: WindowId) -> bool {
@@ -308,6 +367,7 @@ impl WindowSystem for WindowsWindowSystem {
         let _ = with_window(id, |window| {
             window.set_outer_position(PhysicalPosition::new(position.x, position.y));
         });
+        sync_input_window(id);
     }
 
     fn position(&self, id: WindowId) -> Option<WindowPosition> {
@@ -362,7 +422,19 @@ impl WindowSystem for WindowsWindowSystem {
     }
 
     fn set_hit_regions(&self, id: WindowId, regions: &[HitRegion]) {
-        let _ = with_window(id, |window| hit_test::set_hit_regions(window, regions));
+        let input = WINDOWS.with(|windows| {
+            windows
+                .borrow()
+                .get(&id)
+                .and_then(|record| record.input.clone())
+        });
+        if let Some(input) = input {
+            if let Err(error) = input.set_regions(regions) {
+                log::warn!("Input region update failed: {error}");
+            }
+        } else {
+            let _ = with_window(id, |window| hit_test::set_hit_regions(window, regions));
+        }
     }
 
     fn begin_drag(&self, id: WindowId) {
@@ -455,8 +527,14 @@ impl WindowSystem for WindowsWindowSystem {
                 .get(&id)
                 .is_some_and(|record| record.plugin_keyboard)
         });
-        let _ = with_window(id, |window| {
-            if let Some(hwnd) = window_hwnd(window) {
+        let input = WINDOWS.with(|windows| {
+            windows
+                .borrow()
+                .get(&id)
+                .and_then(|record| record.input.as_ref().map(|input| input.window.clone()))
+        });
+        for window in get_window(id).into_iter().chain(input) {
+            if let Some(hwnd) = window_hwnd(&window) {
                 styles::enforce_overlay_window_styles(
                     windows::Win32::Foundation::HWND(hwnd as *mut _),
                     styles.topmost,
@@ -466,7 +544,7 @@ impl WindowSystem for WindowsWindowSystem {
                 }
             }
             window.set_skip_taskbar(styles.skip_taskbar);
-        });
+        }
     }
 
     fn set_topmost(&self, id: WindowId, topmost: bool) {
@@ -491,12 +569,12 @@ impl WindowSystem for WindowsWindowSystem {
     }
 
     fn set_cursor(&self, id: WindowId, cursor: CursorKind) {
-        let _ = with_window(id, |window| {
+        if let Some(window) = get_input_window(id) {
             window.set_cursor(match cursor {
                 CursorKind::Default => CursorIcon::Default,
                 CursorKind::Pointer => CursorIcon::Pointer,
             });
-        });
+        }
     }
 
     fn set_titlebar_theme(&self, id: WindowId, is_light: bool) {

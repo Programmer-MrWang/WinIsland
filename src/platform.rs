@@ -67,8 +67,8 @@ impl WindowRef {
         window().request_redraw(self.0);
     }
 
-    pub(crate) fn set_cursor_hittest(self, enabled: bool) {
-        window().set_hit_regions(self.0, &[HitRegion::WholeWindow(enabled)]);
+    pub(crate) fn set_hit_regions(self, regions: &[HitRegion]) {
+        window().set_hit_regions(self.0, regions);
     }
 
     pub(crate) fn inner_size(self) -> WindowSize {

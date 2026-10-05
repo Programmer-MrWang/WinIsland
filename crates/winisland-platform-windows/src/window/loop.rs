@@ -218,13 +218,38 @@ impl ApplicationHandler<()> for EventAdapter<'_> {
         id: WinitWindowId,
         event: WindowEvent,
     ) {
+        let native_id = WindowId(u64::from(id));
+        let id = if let Some(owner) = super::input_owner(native_id) {
+            if !matches!(
+                event,
+                WindowEvent::CloseRequested
+                    | WindowEvent::DroppedFile(_)
+                    | WindowEvent::CursorMoved { .. }
+                    | WindowEvent::CursorLeft { .. }
+                    | WindowEvent::CursorEntered { .. }
+                    | WindowEvent::MouseInput { .. }
+                    | WindowEvent::MouseWheel { .. }
+                    | WindowEvent::Touch(_)
+                    | WindowEvent::Focused(_)
+                    | WindowEvent::KeyboardInput { .. }
+                    | WindowEvent::Ime(_)
+            ) {
+                return;
+            }
+            owner
+        } else {
+            if matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
+                super::sync_input_window(native_id);
+            }
+            native_id
+        };
         scope_active_event_loop(event_loop, || match event {
             WindowEvent::ScaleFactorChanged {
                 scale_factor,
                 inner_size_writer,
-            } => scope_dpi_writer(WindowId(u64::from(id)), inner_size_writer, || {
+            } => scope_dpi_writer(id, inner_size_writer, || {
                 self.handler.on_event(PlatformEvent::ScaleFactorChanged {
-                    id: WindowId(u64::from(id)),
+                    id,
                     scale: scale_factor,
                 });
             }),
@@ -277,8 +302,7 @@ impl ApplicationHandler<()> for EventAdapter<'_> {
     }
 }
 
-fn platform_event(id: WinitWindowId, event: WindowEvent) -> Option<PlatformEvent> {
-    let id = WindowId(u64::from(id));
+fn platform_event(id: WindowId, event: WindowEvent) -> Option<PlatformEvent> {
     let event = match event {
         WindowEvent::CloseRequested => PlatformEvent::CloseRequested { id },
         WindowEvent::Destroyed => PlatformEvent::Destroyed { id },

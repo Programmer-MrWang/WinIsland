@@ -163,11 +163,6 @@ impl App {
         let interaction_suppressed = cursor_interaction_suppressed
             || (self.fullscreen_hide_active() && !self.hide.overlay_reveal);
         let is_hovering_visible = !interaction_suppressed && is_hovering_island;
-        let is_on_hidden_reveal = !interaction_suppressed
-            && is_over_hidden_reveal
-            && self.config.hidden_width <= MIN_HIDDEN_WIDTH
-            && self.springs.hide.value >= 0.999;
-
         let passive_reveal_active = self.is_fullscreen_suppressed
             && !self.fullscreen_hide_active()
             && is_over_hidden_reveal;
@@ -188,18 +183,6 @@ impl App {
             .as_ref()
             .map(|host| host.runtime().extensions.input_state())
             .unwrap_or_default();
-        if interaction_suppressed {
-            window.set_cursor_hittest(false);
-        } else {
-            window.set_cursor_hittest(
-                is_hovering_visible
-                    || is_on_hidden_reveal
-                    || self.compact_overlay.is_volume_dragging()
-                    || self.compact_overlay.is_brightness_dragging()
-                    || plugin_input.captured,
-            );
-        }
-
         let compact_overlay_visible = self.update_compact_and_auto_hide(
             &window,
             is_hovering_visible || plugin_input.captured || plugin_input.keyboard,
@@ -233,6 +216,7 @@ impl App {
         self.update_lyrics(&window, music_active, is_paused, dt);
         self.update_spring_targets(&window, music_active, is_paused, dt);
         self.update_compact_widget_refresh(&window, now);
+        self.update_hit_regions(&window, plugin_input.captured);
 
         self.schedule_next_frame(
             &window,
@@ -244,6 +228,69 @@ impl App {
                 passive_reveal_active,
             },
         );
+    }
+
+    fn update_hit_regions(&self, window: &WindowRef, plugin_captured: bool) {
+        use winisland_platform::{HitRegion, Rect};
+        use winisland_render::{Path, Point};
+
+        if self.fullscreen_hide_active() && !self.hide.overlay_reveal {
+            window.set_hit_regions(&[]);
+            return;
+        }
+        if self.touch_id.is_some()
+            || self.is_dragging
+            || self.is_right_dragging
+            || self.seek.active
+            || self.compact_overlay.is_volume_dragging()
+            || self.compact_overlay.is_brightness_dragging()
+            || plugin_captured
+        {
+            window.set_hit_regions(&[HitRegion::WholeWindow(true)]);
+            return;
+        }
+        let layout = self.compute_island_layout();
+        let island = winisland_render::Rect::from_xywh(
+            layout.current_island_x as f32,
+            layout.current_island_y as f32,
+            self.springs.w.value,
+            self.springs.h.value,
+        );
+        let path = Path::continuous_rounded_rect(island, self.springs.r.value);
+        let mut regions = vec![HitRegion::Path(path.clip_segments(Point::new(0.0, 0.0)))];
+        let rect_region = |rect: winisland_render::Rect| {
+            HitRegion::Rect(Rect {
+                left: rect.left.floor() as i32,
+                top: rect.top.floor() as i32,
+                right: rect.right.ceil() as i32,
+                bottom: rect.bottom.ceil() as i32,
+            })
+        };
+        if self.expanded {
+            regions.extend(
+                crate::ui::expanded::pager::hit_regions(
+                    island,
+                    self.expanded_pages().len(),
+                    self.config.expanded_scale,
+                    layout.dock_bottom,
+                )
+                .into_iter()
+                .flatten()
+                .map(rect_region),
+            );
+        }
+        if self.is_hidden()
+            && self.config.hidden_width <= MIN_HIDDEN_WIDTH
+            && self.springs.hide.value >= 0.999
+        {
+            regions.push(rect_region(winisland_render::Rect::from_xywh(
+                layout.hidden_reveal_x as f32,
+                layout.hidden_reveal_y as f32,
+                layout.hidden_reveal_w as f32,
+                layout.hidden_reveal_h as f32,
+            )));
+        }
+        window.set_hit_regions(&regions);
     }
 
     fn poll_pending_plugin_install(&mut self) {

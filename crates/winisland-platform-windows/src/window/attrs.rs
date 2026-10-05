@@ -34,6 +34,12 @@ pub(super) fn overlay_attributes(spec: OverlaySpec, owner: isize) -> WindowAttri
         .with_window_icon(get_app_icon())
 }
 
+pub(super) fn input_attributes(spec: OverlaySpec, owner: isize) -> WindowAttributes {
+    overlay_attributes(spec, owner)
+        .with_title("WinIsland Input")
+        .with_resizable(false)
+}
+
 pub(super) fn settings_attributes(
     spec: SettingsSpec,
     monitor: Option<&MonitorHandle>,
