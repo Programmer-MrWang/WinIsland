@@ -152,8 +152,8 @@ pub struct AppConfig {
     #[setting(toggle, label = "clipboard_link_prompt")]
     pub clipboard_link_prompt: bool,
     #[educe(Default(expression = default_expanded_page_order()))]
-    pub expanded_page_order: Vec<ExpandedPageKind>,
-    pub hidden_expanded_pages: Vec<ExpandedPageKind>,
+    pub expanded_page_order: Vec<ExpandedPageEntry>,
+    pub hidden_expanded_pages: Vec<ExpandedPageEntry>,
     #[educe(Default(expression = default_widget_layout()))]
     pub widget_layout: Vec<WidgetSlot>,
     pub plugin_widget_layout: Vec<PluginWidgetSlot>,

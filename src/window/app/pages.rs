@@ -1,9 +1,12 @@
 use std::time::{Duration, Instant};
 
-use crate::ui::expanded::pager::{self, ExpandedPage, PageAvailability, PagerHit, available_pages};
-use crate::utils::mouse::is_point_in_continuous_rounded_rect;
+use winisland_core::config::{ExpandedPageEntry, ExpandedPageKind};
 use winisland_platform::MouseWheelDelta;
 use winisland_render::{Point, Rect};
+
+use crate::core::persistence::{load_config, save_config};
+use crate::ui::expanded::pager::{self, ExpandedPage, PagerHit};
+use crate::utils::mouse::is_point_in_continuous_rounded_rect;
 
 use super::{App, IslandLayout};
 
@@ -13,36 +16,104 @@ const DIAL_PIXEL_STEP: f32 = 20.0;
 
 impl App {
     pub(super) fn expanded_pages(&self) -> Vec<ExpandedPage> {
-        let calendar = self.plugin_host.as_ref().and_then(|host| {
-            host.surface_id(
-                crate::plugin::calendar::ID,
-                crate::plugin::calendar::PAGE_KEY,
-            )
-        });
-        let visible_order: Vec<_> = self
-            .config
-            .expanded_page_order
-            .iter()
-            .copied()
-            .filter(|kind| !self.config.hidden_expanded_pages.contains(kind))
-            .collect();
-        let mut pages = available_pages(
-            &visible_order,
-            &PageAvailability {
-                music: self.music_page_available,
-                calendar,
-            },
-        );
-        if let Some(host) = &self.plugin_host {
-            pages.extend(
-                host.surfaces()
-                    .into_iter()
-                    .filter(|(_, spec)| spec.kind == winisland_plugin_api::SURFACE_PAGE)
-                    .filter(|(id, _)| Some(*id) != calendar)
-                    .map(|(id, _)| ExpandedPage::Plugin(id)),
-            );
+        let snapshot = self
+            .plugin_host
+            .as_ref()
+            .map(|host| host.pages())
+            .unwrap_or_default();
+        let page_id = |plugin: &str, key: &str| {
+            snapshot
+                .iter()
+                .find(|page| page.plugin_id == plugin && page.key == key)
+                .map(|page| page.id)
+        };
+        let mut pages = Vec::new();
+        for entry in &self.config.expanded_page_order {
+            if self.config.hidden_expanded_pages.contains(entry) {
+                continue;
+            }
+            match entry {
+                ExpandedPageEntry::BuiltIn(ExpandedPageKind::Music) => {
+                    if self.music_page_available {
+                        pages.push(ExpandedPage::Music);
+                    }
+                }
+                ExpandedPageEntry::BuiltIn(ExpandedPageKind::Widgets) => {
+                    pages.push(ExpandedPage::Widgets);
+                }
+                ExpandedPageEntry::BuiltIn(ExpandedPageKind::Calendar) => {
+                    if let Some(id) = page_id(
+                        crate::plugin::calendar::ID,
+                        crate::plugin::calendar::PAGE_KEY,
+                    ) {
+                        pages.push(ExpandedPage::Plugin(id));
+                    }
+                }
+                ExpandedPageEntry::BuiltIn(ExpandedPageKind::Timer) => {
+                    pages.push(ExpandedPage::Timer);
+                }
+                ExpandedPageEntry::Plugin { plugin, key } => {
+                    if let Some(id) = page_id(plugin, key) {
+                        pages.push(ExpandedPage::Plugin(id));
+                    }
+                }
+            }
         }
+        let mut seen: Vec<ExpandedPage> = Vec::with_capacity(pages.len());
+        pages.retain(|page| {
+            if seen.contains(page) {
+                false
+            } else {
+                seen.push(*page);
+                true
+            }
+        });
         pages
+    }
+
+    /// Registers first-seen plugin pages at the end of the order, visible by default.
+    pub(super) fn sync_plugin_page_entries(&mut self) {
+        let Some(host) = &self.plugin_host else {
+            return;
+        };
+        let mut config = load_config();
+        let mut changed = false;
+        // The built-in calendar page is represented by the BuiltIn(Calendar) entry.
+        for pages in [
+            &mut config.expanded_page_order,
+            &mut config.hidden_expanded_pages,
+        ] {
+            let before = pages.len();
+            pages.retain(|entry| {
+                entry
+                    .plugin_page()
+                    .is_none_or(|(plugin, _)| plugin != crate::plugin::calendar::ID)
+            });
+            changed |= pages.len() != before;
+        }
+        for page in host.pages() {
+            if page.plugin_id == crate::plugin::calendar::ID {
+                continue;
+            }
+            let entry = ExpandedPageEntry::Plugin {
+                plugin: page.plugin_id,
+                key: page.key,
+            };
+            if !config.expanded_page_order.contains(&entry) {
+                config.expanded_page_order.push(entry);
+                changed = true;
+            }
+        }
+        if changed {
+            save_config(&config);
+            let order = config.expanded_page_order.clone();
+            let hidden = config.hidden_expanded_pages.clone();
+            self.config.expanded_page_order = order.clone();
+            self.config.hidden_expanded_pages = hidden.clone();
+            if let Some(settings) = self.settings.as_mut() {
+                settings.sync_expanded_page_config(&order, &hidden);
+            }
+        }
     }
 
     fn page_index(&self, page: ExpandedPage) -> Option<usize> {

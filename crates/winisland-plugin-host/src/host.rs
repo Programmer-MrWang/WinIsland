@@ -33,6 +33,22 @@ pub struct PluginHost {
     retained_dll: Cell<bool>,
 }
 
+#[derive(Clone, Debug)]
+pub struct PluginPageInfo {
+    pub id: u64,
+    pub plugin_id: String,
+    pub key: String,
+    pub title: String,
+}
+
+fn fixed_string(bytes: &[u8]) -> String {
+    let end = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
+    String::from_utf8_lossy(&bytes[..end]).into_owned()
+}
+
 impl PluginHost {
     pub fn surface_id(&self, plugin_id: &str, key: &str) -> Option<u64> {
         self.surfaces().into_iter().find_map(|(id, spec)| {
@@ -65,6 +81,46 @@ impl PluginHost {
             .collect();
         surfaces.sort_by_key(|(id, spec)| (spec.order, *id));
         surfaces
+    }
+
+    /// Enabled SURFACE_PAGE surfaces with their owning plugin identity.
+    pub fn pages(&self) -> Vec<PluginPageInfo> {
+        let Ok(state) = self.runtime.state.lock() else {
+            return Vec::new();
+        };
+        let mut pages: Vec<_> = state
+            .widgets
+            .iter()
+            .filter_map(|(id, record)| {
+                let spec = (!record.disabled)
+                    .then_some(record.surface)
+                    .flatten()
+                    .filter(|spec| {
+                        spec.kind == winisland_plugin_api::SURFACE_PAGE
+                            && spec.flags & winisland_plugin_api::SURFACE_ENABLED != 0
+                    })?;
+                Some((*id, spec))
+            })
+            .collect();
+        drop(state);
+        pages.sort_by_key(|(id, spec)| (spec.order, *id));
+        pages
+            .into_iter()
+            .filter_map(|(id, spec)| {
+                let token = self
+                    .runtime
+                    .resources
+                    .owner(ResourceKind::Widget, id)
+                    .ok()?;
+                let plugin = self.runtime.registry.get(token).ok()?;
+                Some(PluginPageInfo {
+                    id,
+                    plugin_id: plugin.id,
+                    key: fixed_string(&spec.key),
+                    title: fixed_string(&spec.title),
+                })
+            })
+            .collect()
     }
 
     pub fn drawable_ids(&self) -> Vec<u64> {

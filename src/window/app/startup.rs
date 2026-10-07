@@ -106,6 +106,7 @@ impl App {
                     log::warn!("Plugin load failed: {error}");
                 }
                 log::info!("{} ABI v2 plugin(s) loaded", host.len());
+                self.sync_plugin_page_entries();
             }
             match crate::platform::shell().tray_install(
                 crate::platform::tray_theme(is_light),

@@ -327,6 +327,7 @@ impl App {
                     );
                 }
                 log::info!("Plugin '{}' installed via drop", manifest.name);
+                self.sync_plugin_page_entries();
             }
             Some(Ok(Err(e))) => {
                 Self::show_toast("Plugin Error", &e);

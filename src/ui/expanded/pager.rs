@@ -1,4 +1,3 @@
-use winisland_core::config::ExpandedPageKind;
 use winisland_render::{
     BlurSpec, Image, ImageFit, ImageOptions, Painter, Path, Point, Radius, Rect, Rgba, Sampling,
     StrokeCap, Vec2,
@@ -25,36 +24,6 @@ pub enum ExpandedPage {
     Widgets,
     Timer,
     Plugin(u64),
-}
-
-pub struct PageAvailability {
-    pub music: bool,
-    pub calendar: Option<u64>,
-}
-
-impl ExpandedPage {
-    pub fn is_available(self, availability: &PageAvailability) -> bool {
-        match self {
-            Self::Music => availability.music,
-            Self::Widgets | Self::Timer | Self::Plugin(_) => true,
-        }
-    }
-}
-
-pub fn available_pages(
-    order: &[ExpandedPageKind],
-    availability: &PageAvailability,
-) -> Vec<ExpandedPage> {
-    order
-        .iter()
-        .filter_map(|kind| match kind {
-            ExpandedPageKind::Music => Some(ExpandedPage::Music),
-            ExpandedPageKind::Widgets => Some(ExpandedPage::Widgets),
-            ExpandedPageKind::Calendar => availability.calendar.map(ExpandedPage::Plugin),
-            ExpandedPageKind::Timer => Some(ExpandedPage::Timer),
-        })
-        .filter(|page| page.is_available(availability))
-        .collect()
 }
 
 #[derive(Clone, Copy)]

@@ -14,32 +14,72 @@ impl ExpandedPageKind {
     pub const ALL: [Self; 4] = [Self::Music, Self::Widgets, Self::Calendar, Self::Timer];
 }
 
-pub fn default_expanded_page_order() -> Vec<ExpandedPageKind> {
-    ExpandedPageKind::ALL.to_vec()
+/// Stable expanded-page identity: a built-in kind, or a plugin surface keyed by
+/// (plugin_id, surface key). Plugin entries survive disabled/uninstalled plugins
+/// so their slot is restored when the page returns.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum ExpandedPageEntry {
+    BuiltIn(ExpandedPageKind),
+    Plugin { plugin: String, key: String },
+}
+
+impl ExpandedPageEntry {
+    pub fn plugin_page(&self) -> Option<(&str, &str)> {
+        match self {
+            Self::BuiltIn(_) => None,
+            Self::Plugin { plugin, key } => Some((plugin, key)),
+        }
+    }
+}
+
+pub fn valid_plugin_page(plugin_id: &str, key: &str) -> bool {
+    !plugin_id.is_empty()
+        && plugin_id.len() <= 63
+        && plugin_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        && !key.is_empty()
+        && key.len() <= 63
+        && key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+}
+
+pub fn default_expanded_page_order() -> Vec<ExpandedPageEntry> {
+    ExpandedPageKind::ALL
+        .iter()
+        .copied()
+        .map(ExpandedPageEntry::BuiltIn)
+        .collect()
 }
 
 pub fn normalize_expanded_pages(
-    order: &mut Vec<ExpandedPageKind>,
-    hidden: &mut Vec<ExpandedPageKind>,
+    order: &mut Vec<ExpandedPageEntry>,
+    hidden: &mut Vec<ExpandedPageEntry>,
 ) -> bool {
-    let mut normalized_order = Vec::with_capacity(ExpandedPageKind::ALL.len());
-    let mut normalized_hidden = Vec::with_capacity(ExpandedPageKind::ALL.len());
+    let mut normalized_order = Vec::with_capacity(order.len() + ExpandedPageKind::ALL.len());
+    let mut normalized_hidden = Vec::with_capacity(hidden.len() + ExpandedPageKind::ALL.len());
     for page in order.iter() {
         if !normalized_order.contains(page) {
-            normalized_order.push(*page);
+            normalized_order.push(page.clone());
         }
     }
     for page in ExpandedPageKind::ALL {
-        if !normalized_order.contains(&page) {
-            normalized_order.push(page);
-            if page != ExpandedPageKind::Widgets {
-                normalized_hidden.push(page);
+        let entry = ExpandedPageEntry::BuiltIn(page);
+        if !normalized_order.contains(&entry) {
+            normalized_order.push(entry.clone());
+            if page != ExpandedPageKind::Widgets && !normalized_hidden.contains(&entry) {
+                normalized_hidden.push(entry);
             }
         }
     }
     for page in hidden.iter() {
-        if *page != ExpandedPageKind::Widgets && !normalized_hidden.contains(page) {
-            normalized_hidden.push(*page);
+        if *page == ExpandedPageEntry::BuiltIn(ExpandedPageKind::Widgets) {
+            continue;
+        }
+        if !normalized_hidden.contains(page) {
+            normalized_hidden.push(page.clone());
         }
     }
     let changed = normalized_order != *order || normalized_hidden != *hidden;
@@ -305,3 +345,58 @@ pub const AVAILABLE_WIDGETS: [WidgetKind; 3] = [
 ];
 pub const AVAILABLE_COMPACT_WIDGETS: [CompactWidgetKind; 2] =
     [CompactWidgetKind::Time, CompactWidgetKind::ResourceUsage];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+    struct PageConfig {
+        pages: Vec<ExpandedPageEntry>,
+    }
+
+    #[test]
+    fn plugin_page_entries_round_trip_through_toml() {
+        let config = PageConfig {
+            pages: vec![
+                ExpandedPageEntry::BuiltIn(ExpandedPageKind::Music),
+                ExpandedPageEntry::Plugin {
+                    plugin: "example-plugin".into(),
+                    key: "dashboard.main".into(),
+                },
+            ],
+        };
+        let encoded = toml::to_string(&config).expect("page config should serialize");
+        let decoded: PageConfig = toml::from_str(&encoded).expect("page config should deserialize");
+        assert_eq!(decoded, config);
+    }
+
+    #[test]
+    fn plugin_page_validation_matches_surface_key_rules() {
+        assert!(valid_plugin_page("example-plugin", "dashboard.main"));
+        assert!(!valid_plugin_page("example-plugin", "dashboard/main"));
+        assert!(!valid_plugin_page("example/plugin", "dashboard"));
+    }
+
+    #[test]
+    fn normalize_keeps_plugin_pages_and_never_hides_widgets() {
+        let plugin = ExpandedPageEntry::Plugin {
+            plugin: "example-plugin".into(),
+            key: "dashboard".into(),
+        };
+        let mut order = vec![
+            plugin.clone(),
+            ExpandedPageEntry::BuiltIn(ExpandedPageKind::Widgets),
+        ];
+        let mut hidden = vec![
+            plugin.clone(),
+            ExpandedPageEntry::BuiltIn(ExpandedPageKind::Widgets),
+        ];
+
+        normalize_expanded_pages(&mut order, &mut hidden);
+
+        assert!(order.contains(&plugin));
+        assert!(hidden.contains(&plugin));
+        assert!(!hidden.contains(&ExpandedPageEntry::BuiltIn(ExpandedPageKind::Widgets,)));
+    }
+}
